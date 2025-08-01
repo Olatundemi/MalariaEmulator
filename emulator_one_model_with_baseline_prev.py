@@ -4,8 +4,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from src.inference_sequence_creator import create_sequences_2outputs
-from src.inference_model_exp import LSTMModel
+from src.inference_sequence_creator import create_sequences_with_separate_scalar
+from src.inference_model_exp import LSTMModel_baseline
 import time
 
 log_transform = lambda x: np.log(x + 1e-8)
@@ -40,7 +40,7 @@ st.markdown("""
 @st.cache_resource
 def load_model(model_path):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = LSTMModel(input_size=1, architecture=[256, 128, 64, 32])
+    model = LSTMModel_baseline(input_size=1, architecture=[200, 100, 50])
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.to(device)
     model.eval()
@@ -92,15 +92,16 @@ def get_predictions(test_data, selected_runs, run_column, window_size, _model, _
             continue
 
         scaled_run_data, _ = preprocess_data(run_data)
-        X_test_scaled, y_test_scaled = create_sequences_2outputs(scaled_run_data, window_size)
+        X_test_scaled, X_test_scalar, y_test_scaled = create_sequences_with_separate_scalar(scaled_run_data, window_size) #A sequential input and a scalar
 
         if len(X_test_scaled) == 0:
             continue
 
         X_test_scaled = X_test_scaled.to(_device)
+        X_test_scalar = X_test_scalar.to(device)
 
         with torch.no_grad():
-            test_predictions_scaled = _model(X_test_scaled.unsqueeze(-1)).cpu().numpy()
+            test_predictions_scaled = _model(X_test_scaled, X_test_scalar).cpu().numpy()
 
         test_predictions_unscaled = inverse_log_transform(test_predictions_scaled)
         X_test_unscaled = inverse_log_transform(X_test_scaled.cpu().numpy()) # Consider using the original values rather than unscaling again
@@ -141,7 +142,7 @@ def compute_global_yaxis_limits(predictions_dict, test_data, selected_runs, run_
 def plot_predictions(test_data, run_column, time_column, selected_runs,
                      predictions_dict, log_eir, log_inc, log_all, has_true_values,
                      prev_limits, eir_limits, inc_limits):
-    
+
     is_string_time = not pd.api.types.is_numeric_dtype(test_data[time_column])
 
     if is_string_time:
@@ -177,6 +178,14 @@ def plot_predictions(test_data, run_column, time_column, selected_runs,
 
         time_values_plot = time_values[:len(test_predictions_unscaled)]
 
+        # 🧠 Fixed time_vals based on whether it's string or numeric
+        if is_string_time:
+            time_vals = np.array(time_labels)[time_values_plot.astype(int)]
+        else:
+            time_vals = np.ravel(time_values_plot)
+
+        run_vals = np.array([run] * len(time_vals))
+
         titles = ["Prevalence", "EIR", "Incidence"]
         predictions = [
             X_test_unscaled[:, -1],
@@ -191,8 +200,6 @@ def plot_predictions(test_data, run_column, time_column, selected_runs,
         log_scales = [log_all, log_eir or log_all, log_inc or log_all]
 
         for ax, title, color, pred, true_val, log_scale in zip(axes[i], titles, colors, predictions, true_values, log_scales):
-            
-            
             if pred is None:
                 continue
 
@@ -204,8 +211,6 @@ def plot_predictions(test_data, run_column, time_column, selected_runs,
                 ax.plot(time_values[:len(prev_true_adjusted)], prev_true_adjusted, linestyle="--", color=color, label="Prevalence", linewidth=2.5)
             else:
                 ax.plot(time_values_plot, pred, linestyle="--", color=color, label=f"Estimated {title}", linewidth=2.5)
-
-            
 
             if log_scale:
                 ax.set_yscale('log')
@@ -221,12 +226,27 @@ def plot_predictions(test_data, run_column, time_column, selected_runs,
             ax.set_ylabel(title, fontsize=12)
             ax.legend()
 
-        data_to_download.append(pd.DataFrame({
-            "Prevalence": predictions[0],
-            "Estimated EIR": predictions[1],
-            "Estimated Incidence": predictions[2] if predictions[2] is not None else np.nan
-        }))
+        # Create downloadable dataframe
+        prevalence_vals = np.ravel(predictions[0])
+        eir_vals = np.ravel(predictions[1])
+        inc_vals = np.ravel(predictions[2]) if predictions[2] is not None else np.full_like(eir_vals, np.nan)
 
+        df_to_append = pd.DataFrame({
+            "Run": run_vals,
+            "Time": time_vals,
+            "Prevalence": prevalence_vals,
+            "Estimated EIR": eir_vals,
+            "Estimated Incidence": inc_vals,
+        })
+
+        if has_true_values and true_values[1] is not None:
+            df_to_append["Actual EIR"] = np.ravel(true_values[1])
+        if has_true_values and true_values[2] is not None:
+            df_to_append["Actual Incidence"] = np.ravel(true_values[2])
+
+        data_to_download.append(df_to_append)
+
+    # Set x-axis tick labels on final row of plots
     for ax in axes[-1]:
         if is_string_time:
             tick_indices = np.arange(0, len(time_values_plot), step=6, dtype=int)
@@ -238,8 +258,9 @@ def plot_predictions(test_data, run_column, time_column, selected_runs,
     plt.tight_layout()
     st.pyplot(fig)
 
+    # 📥 Combine and download
     if data_to_download:
-        combined_data = pd.concat(data_to_download, keys=selected_runs, names=[run_column, "Index"])
+        combined_data = pd.concat(data_to_download, ignore_index=True)
         csv_data = combined_data.to_csv(index=False).encode('utf-8')
         st.download_button("📥 Download Estimates as CSV", data=csv_data, file_name="predictions.csv", mime="text/csv")
 
@@ -259,7 +280,7 @@ def adjust_trailing_zero_prevalence(df, prevalence_column='prev_true', min_val=0
 
 
 # Streamlit UI
-st.title("🔬 Malaria Incidence and EIR Estimator with AI")
+st.title("🔬 Malaria Incidence and EIR Estimator with AI - With Baseline Prev")
 
 data_source = st.radio("📊 Select data source", ("Upload my own data", "Use preloaded test data"))
 
@@ -293,7 +314,7 @@ if 'prev_true' not in columns:
 
 test_data = adjust_trailing_zero_prevalence(test_data, prevalence_column='prev_true', seed=42)
 
-model_path = "C:/Users/oibrahim/Documents/MalariaEmulator/src/trained_model/4_layers_model.pth"
+model_path = "C:/Users/oibrahim/Documents/MalariaEmulator/src/trained_model/3_layers_model_15000runs_W10_trial_for_runs_baseline.pth"
 window_size = 10
 model, device = load_model(model_path)
 
@@ -329,7 +350,6 @@ if selected_runs:
         log_eir, log_inc, log_all, has_true_values, prev_limits, eir_limits, inc_limits
     )
     st.info(f"✅ Plots generated in {time.time() - start_time:.2f} seconds")
-
 
 
 def main():
