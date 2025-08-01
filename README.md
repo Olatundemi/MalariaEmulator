@@ -1,34 +1,19 @@
-# Prevalence Prediction and Simulation Analysis
+#EIR and Incidence Prediction Analysis
 
 This project aims to provide tool for estimating malaria incidence and transmission intensity from timeseries prevalence data through emulation of mechanistic Malaria transmission model. It includes helper functions, data processing, and machine learning models pipeline to create predictive systems using simulation data from malsimgem.
 
 ## Repository Overview
 
-- A primary Jupyter Notebook: `ANC_Emulator_PyTorch.ipynb`
-- Helper scripts for sequence creation and model development:
+- Primary Jupyter Notebook: `ANC_Emulator_PyTorch.ipynb` and other variants for model training
+- Helper scripts for sequence creation, model development and Inferencing:
   - `model_exp.py`
-  - `sequence_creator.py`
-- Custom functions for preprocessing simulation data.
-- Dashboard for estimating incidence and transmission intensities/EIR 'emulator.py'
+  - `sequence_creator.py` etc
+- Dashboard for estimating incidence and transmission intensities/EIR 
+  - `emulator.py` Deployed to [estimate](https://estimatemalariaparameters.streamlit.app/)
+  - `emulator_one_model.py`
+  - `emulator_two_models.py` #Uses one model to predict each variable
 
 ---
-
-## Key Features
-
-### Main Components
-1. **Annual Averages Calculation**
-   - Analyzes simulation data to compute annual averages for key metrics (e.g., true prevalence, transmission intensity) for years 2, 5, and 8.
-
-2. **Monthly Data Filtering**
-   - Extracts monthly data for years 10 to 20 from simulation results.
-
-3. **Sequence Creation**
-   - Processes time-series data to generate input-output pairs suitable for model training, handling padding for initial time steps.
-
-4. **Machine Learning Model**
-   - Implements an LSTM-based architecture to predict malaria metrics (`EIR_true`, `incall`) using simulation data.
-
-
 ## Folder Structure
 
 ```
@@ -44,11 +29,12 @@ project_root/
 
 │── test/                # Unit tests
 │   ├── test_data         # Contains a thousand test runs across different transmission intensities
-│── notebooks/            # Jupyter notebooks (to be updated with recent experiments)
+│── notebooks/            # Jupyter notebooks (with recent experiments)
 │── requirements.txt      # Dependencies
 │── README.md             # Project overview and instructions
 │── emulator.py           # Python script containing deployed streamlit dashboard
 │── emulator_one_model.py # Emulator variant predicting with one model   
+│── emulator_one_model_with_baseline_prev.py # Emulator variant predicting with one model 
 │── emulator_two_model.py # Emulator variant predicting with two models
 │── .gitignore            # Ignored files (e.g., __pycache__, .venv)
 │── setup.py              # Setup script (to be updated)
@@ -58,6 +44,26 @@ project_root/
 ├── plots/                 # Saved visuals
 
 
-https://estimatemalariaparameters.streamlit.app/
+##Installtion and Set-up
 
-![alt text](<Screenshot (1)-2.png>)
+- Install Python of Desired Version - This project uses Python 3.12.6
+- Clone repo and navigate to project root directory using command prompt (cd /path/to/MalariaEmulator)
+- Install Dependecies with "pip install -r requirements.txt" (create python virtual environment in the project directory before installing dependencies if desired. That is the standard practice)
+- Run the ANC_Emulator_PyTorch.ipynb notebook or other variants for the training process
+- Model Weights and plots are saved in src and plots folder respectively. This can be modified in the respective function creating the plot
+- To run the dashboard, while still in the project root (in command prompt), run "streamlit run emulator.py" or the other variants
+
+## Key Training Pipeline
+
+### Main Components
+1. **Annual Averages Calculation**
+   - Analyzes simulation data to compute annual averages for key metrics (e.g., true prevalence, transmission intensity) for years 2, 5, and 8.
+
+2. **Monthly Data Filtering**
+   - Extracts monthly data for years 10 to 20 from simulation results.
+
+3. **Sequence Creation**
+   - Processes time-series data to generate input-output pairs suitable for model training, handling padding for initial time steps.
+
+4. **Machine Learning Model**
+   - Implements an LSTM-based architecture to predict malaria metrics (`EIR_true`, `incall`) using simulation data.

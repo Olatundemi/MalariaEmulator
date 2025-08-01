@@ -4,8 +4,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from src.sequence_creator import create_sequences, create_shifting_sequences
-from src.model_exp import LSTM_EIR, LSTM_Incidence
+from src.inference_sequence_creator import create_sequences, create_shifting_sequences
+from src.inference_model_exp import LSTM_EIR, LSTM_Incidence
 import time
 
 
@@ -265,15 +265,15 @@ def plot_predictions(run_results, run_column, time_column, selected_runs,
 
             x_vals = time_values_plot#[:len(true)]
 
-            # Only plot prediction for EIR and Incidence
-            if title != "Prevalence" and pred is not None:
-                ax.plot(x_vals, pred, linestyle="--", color=color,
-                        label=f"Estimated {title}", linewidth=2.5)
-
             # Always plot true values (black)
             if true is not None:
                 ax.plot(x_vals, true, color="black", linestyle="-",
                         label=f"True {title}", linewidth=2)
+
+            # Only plot prediction for EIR and Incidence
+            if title != "Prevalence" and pred is not None:
+                ax.plot(x_vals, pred, linestyle="--", color=color,
+                        label=f"Estimated {title}", linewidth=2.5)
 
             if log_scales[title]:
                 ax.set_yscale('log')
@@ -386,3 +386,13 @@ if selected_runs:
         log_eir, log_inc, log_all, prev_limits, eir_limits, inc_limits
     )
     st.info(f"✅ Plots generated in {time.time() - start_time:.2f} seconds")
+
+
+def main():
+    import streamlit.web.bootstrap
+    from pathlib import Path
+    script_path = Path(__file__).resolve()
+    streamlit.web.bootstrap.run(script_path, '', [])
+
+if __name__ == "__main__":
+    main()
