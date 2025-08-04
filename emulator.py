@@ -127,3 +127,13 @@ if selected_runs:
         test_data, run_column, time_column, selected_runs, model, device, window_size,
         log_eir, log_inc, log_all, has_true_values, prev_limits, eir_limits
     )
+
+
+def main():
+    import streamlit.web.bootstrap
+    from pathlib import Path
+    script_path = Path(__file__).resolve()
+    streamlit.web.bootstrap.run(script_path, '', [])
+
+if __name__ == "__main__":
+    main()
