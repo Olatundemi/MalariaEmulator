@@ -221,7 +221,7 @@ def plot_predictions(run_results, run_column, time_column, selected_runs,
             y_inc_unscaled = inverse_log_transform(y_inc.numpy())
 
         time_values_plot = time_values[:len(eir_preds_unscaled)-window_size] # I took off the last rough predictions
-        min_len = len(eir_preds_unscaled) - window_size#len(time_values_plot)
+        min_len = len(eir_preds_unscaled) - window_size#len(time_va
 
         plot_data = []
 
