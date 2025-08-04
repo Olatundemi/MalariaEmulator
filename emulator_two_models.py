@@ -220,8 +220,8 @@ def plot_predictions(run_results, run_column, time_column, selected_runs,
             )
             y_inc_unscaled = inverse_log_transform(y_inc.numpy())
 
-        time_values_plot = time_values[:len(eir_preds_unscaled)]
-        min_len = len(eir_preds_unscaled)#len(time_values_plot)
+        time_values_plot = time_values[:len(eir_preds_unscaled)-window_size] # I took off the last rough predictions
+        min_len = len(eir_preds_unscaled) - window_size#len(time_values_plot)
 
         plot_data = []
 
@@ -235,7 +235,7 @@ def plot_predictions(run_results, run_column, time_column, selected_runs,
         # EIR
         plot_data.append({
             "title": "EIR",
-            "pred": eir_preds_unscaled[:min_len, 0],
+            "pred": eir_preds_unscaled[:min_len, 0], #
             "true": y_eir_unscaled[:min_len, 0] if y_eir_unscaled is not None else None
         })
 
@@ -308,7 +308,7 @@ def plot_predictions(run_results, run_column, time_column, selected_runs,
 
 
 # Streamlit UI
-st.title("🔬 Malaria Incidence and EIR Estimator with AI - 2 Models")
+st.title("🔬 Malaria Incidence and EIR Estimator with AI")
 
 
 # Choose data source
@@ -388,11 +388,11 @@ if selected_runs:
     st.info(f"✅ Plots generated in {time.time() - start_time:.2f} seconds")
 
 
-def main():
-    import streamlit.web.bootstrap
-    from pathlib import Path
-    script_path = Path(__file__).resolve()
-    streamlit.web.bootstrap.run(script_path, '', [])
+# def main():
+#     import streamlit.web.bootstrap
+#     from pathlib import Path
+#     script_path = Path(__file__).resolve()
+#     streamlit.web.bootstrap.run(script_path, '', [])
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()
