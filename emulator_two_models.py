@@ -351,8 +351,8 @@ if 'prev_true' not in columns:
 
 #model_path = #"src/trained_model/4_layers_model.pth"
 window_size = 10
-model_eir_path = "C:/Users/oibrahim/Documents/MalariaEmulator/src/trained_model/shifting_sequences/LSTM_EIR_4_layers_10000run_W10.pth"
-model_inc_path = "C:/Users/oibrahim/Documents/MalariaEmulator/src/trained_model/shifting_sequences/LSTM_Incidence_4_layer_10000run_W10_shifting_sequence.pth"
+model_eir_path = "src/trained_model/shifting_sequences/LSTM_EIR_4_layers_10000run_W10.pth"
+model_inc_path = "src/trained_model/shifting_sequences/LSTM_Incidence_4_layer_10000run_W10_shifting_sequence.pth"
 model_eir, model_inc, device = load_models(model_eir_path, model_inc_path)
 
 df_scaled, has_true_values = preprocess_data(test_data)
