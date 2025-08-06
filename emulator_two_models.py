@@ -411,26 +411,29 @@ log_all = st.checkbox("🔍 View All Plots on Log Scale", value=False)
 
 
 if selected_runs:
-    start_time = time.time()
-    run_results = generate_predictions_per_run(
-        filtered_data, selected_runs, run_column, window_size, model_eir, model_inc, device, has_true_values
-    )
-    st.info(f"✅ Predictions computed in {time.time() - start_time:.2f} seconds")
+    if st.button("🚀 Run Predictions"):
+        start_time = time.time()
+        run_results = generate_predictions_per_run(
+            filtered_data, selected_runs, run_column, window_size,
+            model_eir, model_inc, device, has_true_values
+        )
+        st.info(f"✅ Predictions computed in {time.time() - start_time:.2f} seconds")
 
-    if not run_results:
-        st.warning("No valid predictions could be generated.")
-        st.stop()
+        if not run_results:
+            st.warning("No valid predictions could be generated.")
+            st.stop()
 
-    start_time = time.time()
-    prev_limits, eir_limits, inc_limits = compute_global_yaxis_limits(run_results)
-    st.info(f"✅ Axis limits calculated in {time.time() - start_time:.2f} seconds")
+        start_time = time.time()
+        prev_limits, eir_limits, inc_limits = compute_global_yaxis_limits(run_results)
+        st.info(f"✅ Axis limits calculated in {time.time() - start_time:.2f} seconds")
 
-    start_time = time.time()
-    plot_predictions(
-        run_results, run_column, time_column, selected_runs,
-        log_eir, log_inc, log_all, prev_limits, eir_limits, inc_limits
-    )
-    st.info(f"✅ Plots generated in {time.time() - start_time:.2f} seconds")
+        start_time = time.time()
+        plot_predictions(
+            run_results, run_column, time_column, selected_runs,
+            log_eir, log_inc, log_all, prev_limits, eir_limits, inc_limits
+        )
+        st.info(f"✅ Plots generated in {time.time() - start_time:.2f} seconds")
+
 
 
 # def main():
