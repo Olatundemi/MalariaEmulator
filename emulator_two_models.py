@@ -168,7 +168,7 @@ def compute_global_yaxis_limits(run_results):
         all_eir.extend(result['eir_preds_unscaled'][:, 0])
 
     prev_min, prev_max = 0, max(all_prev) * 1.1 if all_prev else (0, 1)
-    eir_min, eir_max = 0, max(all_eir) * 1.1 if all_eir else (0, 1)#550  # Can be dynamic too
+    eir_min, eir_max = 0, max(all_eir) * 1.1 if all_eir else (0, 1)
     inc_min, inc_max = 0, max(all_inc) * 1.1 if all_inc else (0, 1)
 
     return (prev_min, prev_max), (eir_min, eir_max), (inc_min, inc_max)
@@ -283,11 +283,24 @@ def plot_predictions(run_results, run_column, time_column, selected_runs,
             ax.set_ylabel(title, fontsize=12)
             ax.legend()
 
-        data_to_download.append(pd.DataFrame({
+            df_export = pd.DataFrame({
+            "run": run,
+            "time": run_data[time_column].values[:min_len],
             "Prevalence": plot_data[0]["true"],
             "Estimated EIR": plot_data[1]["pred"],
             "Estimated Incidence": plot_data[2]["pred"]
-        }))
+            })
+
+            # Add Actual EIR if available
+            if plot_data[1]["true"] is not None:
+                df_export["Actual EIR"] = plot_data[1]["true"]
+
+            # Add Actual Incidence if available
+            if plot_data[2]["true"] is not None:
+                df_export["Actual Incidence"] = plot_data[2]["true"]
+
+            data_to_download.append(df_export)
+
 
     for ax in axes[-1]:
         if is_string_time:
@@ -305,6 +318,19 @@ def plot_predictions(run_results, run_column, time_column, selected_runs,
         csv_data = combined_data.to_csv(index=False).encode('utf-8')
         st.download_button("📥 Download Estimates as CSV", data=csv_data, file_name="predictions.csv", mime="text/csv")
 
+
+def adjust_trailing_zero_prevalence(df, prevalence_column='prev_true', min_val=0.0003, max_val=0.001, seed=None):
+    df = df.copy()
+    zeros_mask = df[prevalence_column] == 0
+    num_zeros = zeros_mask.sum()
+
+    if num_zeros > 0:
+        #st.warning(f"⚠️ Found {num_zeros} zero prevalence value(s); replacing with random values.")
+        rng = np.random.default_rng(seed)
+        random_values = rng.uniform(min_val, max_val, size=num_zeros)
+        df.loc[zeros_mask, prevalence_column] = random_values
+
+    return df
 
 
 # Streamlit UI
@@ -348,6 +374,8 @@ if 'prev_true' not in columns:
     
     prevalence_column = st.selectbox("🩸 Select the column corresponding to prevalence", columns)#, key=f"prevalence_select_{key_suffix}")
     test_data = test_data.rename(columns={prevalence_column: 'prev_true'})
+
+test_data = adjust_trailing_zero_prevalence(test_data, prevalence_column='prev_true', seed=42)
 
 #model_path = #"src/trained_model/4_layers_model.pth"
 window_size = 10
