@@ -220,8 +220,8 @@ def plot_predictions(run_results, run_column, time_column, selected_runs,
             )
             y_inc_unscaled = inverse_log_transform(y_inc.numpy())
 
-        time_values_plot = time_values[:len(eir_preds_unscaled)]
-        min_len = len(eir_preds_unscaled)#len(time_values_plot)
+        time_values_plot = time_values[:len(eir_preds_unscaled)-window_size] # I took off the last rough predictions
+        min_len = len(eir_preds_unscaled) - window_size#len(time_va
 
         plot_data = []
 
@@ -235,7 +235,7 @@ def plot_predictions(run_results, run_column, time_column, selected_runs,
         # EIR
         plot_data.append({
             "title": "EIR",
-            "pred": eir_preds_unscaled[:min_len, 0],
+            "pred": eir_preds_unscaled[:min_len, 0], #
             "true": y_eir_unscaled[:min_len, 0] if y_eir_unscaled is not None else None
         })
 
@@ -308,7 +308,7 @@ def plot_predictions(run_results, run_column, time_column, selected_runs,
 
 
 # Streamlit UI
-st.title("🔬 Malaria Incidence and EIR Estimator with AI - 2 Models")
+st.title("🔬 Malaria Incidence and EIR Estimator with AI")
 
 
 # Choose data source
@@ -351,8 +351,8 @@ if 'prev_true' not in columns:
 
 #model_path = #"src/trained_model/4_layers_model.pth"
 window_size = 10
-model_eir_path = "C:/Users/oibrahim/Documents/MalariaEmulator/src/trained_model/shifting_sequences/LSTM_EIR_4_layers_10000run_W10.pth"
-model_inc_path = "C:/Users/oibrahim/Documents/MalariaEmulator/src/trained_model/shifting_sequences/LSTM_Incidence_4_layer_10000run_W10_shifting_sequence.pth"
+model_eir_path = "src/trained_model/shifting_sequences/LSTM_EIR_4_layers_10000run_W10.pth"
+model_inc_path = "src/trained_model/shifting_sequences/LSTM_Incidence_4_layer_10000run_W10_shifting_sequence.pth"
 model_eir, model_inc, device = load_models(model_eir_path, model_inc_path)
 
 df_scaled, has_true_values = preprocess_data(test_data)
@@ -388,11 +388,11 @@ if selected_runs:
     st.info(f"✅ Plots generated in {time.time() - start_time:.2f} seconds")
 
 
-def main():
-    import streamlit.web.bootstrap
-    from pathlib import Path
-    script_path = Path(__file__).resolve()
-    streamlit.web.bootstrap.run(script_path, '', [])
+# def main():
+#     import streamlit.web.bootstrap
+#     from pathlib import Path
+#     script_path = Path(__file__).resolve()
+#     streamlit.web.bootstrap.run(script_path, '', [])
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()

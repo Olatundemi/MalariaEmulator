@@ -4,8 +4,6 @@ numpy==1.26.4
 pandas==2.2.3
 scikit-learn==1.5.2
 seaborn==0.13.2
-tensorflow==2.17.0
-tensorflow-io-gcs-filesystem==0.37.1
 torch==2.6.0
 torchaudio==2.6.0
 torchvision==0.21.0

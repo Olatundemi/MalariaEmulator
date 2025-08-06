@@ -129,11 +129,11 @@ if selected_runs:
     )
 
 
-def main():
-    import streamlit.web.bootstrap
-    from pathlib import Path
-    script_path = Path(__file__).resolve()
-    streamlit.web.bootstrap.run(script_path, '', [])
+# def main():
+#     import streamlit.web.bootstrap
+#     from pathlib import Path
+#     script_path = Path(__file__).resolve()
+#     streamlit.web.bootstrap.run(script_path, '', [])
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()
