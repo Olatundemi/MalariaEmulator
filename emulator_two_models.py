@@ -7,6 +7,7 @@ import seaborn as sns
 from src.inference_sequence_creator import create_sequences, create_shifting_sequences
 from src.inference_model_exp import LSTM_EIR, LSTM_Incidence
 import time
+import hashlib
 
 
 log_transform = lambda x: np.log(x + 1e-8)
@@ -332,6 +333,12 @@ def adjust_trailing_zero_prevalence(df, prevalence_column='prev_true', min_val=0
 
     return df
 
+@st.cache_data
+def load_uploaded_csv(file_content):
+    return pd.read_csv(file_content)
+
+def get_file_hash(file):
+    return hashlib.md5(file.getvalue()).hexdigest()
 
 # Streamlit UI
 st.title("🔬 Malaria Incidence and EIR Estimator with AI")
@@ -352,8 +359,10 @@ if data_source == "Use preloaded test data":
         st.stop()
 else:
     uploaded_file = st.file_uploader("📂 Upload prevalence data to estimate (CSV)", type=["csv"])
-    if uploaded_file:
-        test_data = pd.read_csv(uploaded_file)
+
+    if uploaded_file is not None:
+        file_hash = get_file_hash(uploaded_file)
+        test_data = load_uploaded_csv(uploaded_file)
     else:
         st.warning("Please upload a CSV file to continue.")
         st.stop()
@@ -373,9 +382,9 @@ filtered_data = test_data[test_data[run_column].isin(selected_runs)]
 if 'prev_true' not in columns:
     
     prevalence_column = st.selectbox("🩸 Select the column corresponding to prevalence", columns)#, key=f"prevalence_select_{key_suffix}")
-    test_data = test_data.rename(columns={prevalence_column: 'prev_true'})
+    filtered_data = filtered_data.rename(columns={prevalence_column: 'prev_true'})
 
-test_data = adjust_trailing_zero_prevalence(test_data, prevalence_column='prev_true', seed=42)
+#test_data = adjust_trailing_zero_prevalence(test_data, prevalence_column='prev_true', seed=42)
 
 #model_path = #"src/trained_model/4_layers_model.pth"
 window_size = 10
@@ -383,10 +392,18 @@ model_eir_path = "src/trained_model/shifting_sequences/LSTM_EIR_4_layers_10000ru
 model_inc_path = "src/trained_model/shifting_sequences/LSTM_Incidence_4_layer_10000run_W10_shifting_sequence.pth"
 model_eir, model_inc, device = load_models(model_eir_path, model_inc_path)
 
-df_scaled, has_true_values = preprocess_data(test_data)
+if filtered_data.empty:
+    st.warning("No valid data found. Select necessary items to proceed")
+    st.stop()
+
+# Adjust zero prevalence in the filtered data only
+filtered_data = adjust_trailing_zero_prevalence(filtered_data, prevalence_column='prev_true', seed=42)
+
+# Preprocess the filtered data
+df_scaled, has_true_values = preprocess_data(filtered_data)
 
 if df_scaled is None:
-    st.stop()  # Stop further execution if preprocessing fails
+    st.stop() # Stop execution if preprocessing fails
     
 log_eir = st.checkbox("📈 View EIR on Log Scale", value=False)
 log_inc = st.checkbox("📉 View Incidence on Log Scale", value=False)
@@ -394,26 +411,29 @@ log_all = st.checkbox("🔍 View All Plots on Log Scale", value=False)
 
 
 if selected_runs:
-    start_time = time.time()
-    run_results = generate_predictions_per_run(
-        test_data, selected_runs, run_column, window_size, model_eir, model_inc, device, has_true_values
-    )
-    st.info(f"✅ Predictions computed in {time.time() - start_time:.2f} seconds")
+    if st.button("🚀 Run Predictions"):
+        start_time = time.time()
+        run_results = generate_predictions_per_run(
+            filtered_data, selected_runs, run_column, window_size,
+            model_eir, model_inc, device, has_true_values
+        )
+        st.info(f"✅ Predictions computed in {time.time() - start_time:.2f} seconds")
 
-    if not run_results:
-        st.warning("No valid predictions could be generated.")
-        st.stop()
+        if not run_results:
+            st.warning("No valid predictions could be generated.")
+            st.stop()
 
-    start_time = time.time()
-    prev_limits, eir_limits, inc_limits = compute_global_yaxis_limits(run_results)
-    st.info(f"✅ Axis limits calculated in {time.time() - start_time:.2f} seconds")
+        start_time = time.time()
+        prev_limits, eir_limits, inc_limits = compute_global_yaxis_limits(run_results)
+        st.info(f"✅ Axis limits calculated in {time.time() - start_time:.2f} seconds")
 
-    start_time = time.time()
-    plot_predictions(
-        run_results, run_column, time_column, selected_runs,
-        log_eir, log_inc, log_all, prev_limits, eir_limits, inc_limits
-    )
-    st.info(f"✅ Plots generated in {time.time() - start_time:.2f} seconds")
+        start_time = time.time()
+        plot_predictions(
+            run_results, run_column, time_column, selected_runs,
+            log_eir, log_inc, log_all, prev_limits, eir_limits, inc_limits
+        )
+        st.info(f"✅ Plots generated in {time.time() - start_time:.2f} seconds")
+
 
 
 # def main():

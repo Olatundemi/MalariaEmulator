@@ -8,4 +8,4 @@ torch==2.6.0
 torchaudio==2.6.0
 torchvision==0.21.0
 extra-streamlit-components==0.1.71
-streamlit==1.39.0
+streamlit==1.48.1
