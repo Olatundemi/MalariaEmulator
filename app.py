@@ -411,8 +411,8 @@ with tab1:
                 
 
                 # ----------- Display 2 -----------
-                st.markdown("**Display 2 — What we actually see (observations)**")
-                st.caption("In practice, we observe prevalence (e.g., ANC). Transmission and incidence remain hidden without modelling.")
+                st.markdown("**What we actually see (observations)**")
+                st.caption("Here we asssume we only observe prevalnce (e..g ANC) and want to reconstruct transmision and burden using our mechanistic understanding of these relationships")
                 c1, c2, c3 = st.columns(3)
                 with c1: st.plotly_chart(ts_fig(t, eir, "EIR (hidden)", COLORS["eir"], show_markers=True, opacity=0.12), use_container_width=True)
                 with c2: st.plotly_chart(ts_fig(t, inc, "Incidence (hidden)", COLORS["inc"], show_markers=True, opacity=0.12), use_container_width=True)
@@ -421,7 +421,7 @@ with tab1:
 
                 # ----------- Display 3 -----------
                 if st.session_state["released"]:
-                    st.markdown("**Display 3 — MARLIN reconstruction (from prevalence only)**")
+                    st.markdown("**MARLIN reconstruction (from ANC prevalence only)**")
 
                     # Load models
                     window_size = 10
