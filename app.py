@@ -49,7 +49,7 @@ def ts_fig(t, y, title, color, show_markers=False, opacity=1.0):
     fig.update_layout(
         height=240,
         margin=dict(l=40, r=10, t=30, b=30),
-        xaxis_title="Month",
+        xaxis_title="Month(s)",
         yaxis_title=title,
         template="simple_white"
     )
@@ -249,6 +249,15 @@ def plot_predictions(run_results, run_column, time_column, selected_runs,
                 "Estimated Incidence": plot_data[2]["pred"]
             })
             data_to_download.append(df_export)
+
+    for ax in axes[-1]:
+        if is_string_time:
+            tick_indices = np.arange(0, len(time_values_plot), step=6, dtype=int)
+            ax.set_xticks(time_values_plot[tick_indices])
+            ax.set_xticklabels(np.array(time_labels)[tick_indices], rotation=45, fontsize=10)
+        else:
+            ax.set_xlabel("Years", fontsize=12)
+
 
     plt.tight_layout()
     st.pyplot(fig)
@@ -464,7 +473,8 @@ with tab1:
                                                     line=dict(color="black", dash="dash")))
                         fig_eir.update_layout(
                             template="simple_white", height=300, margin=dict(l=40, r=10, t=30, b=30),
-                            xaxis_title="Month", yaxis_title="EIR",
+                            xaxis_title="Month(s)", yaxis_title="EIR",
+                            yaxis=dict(range=[0, max(max(eir), max(eir_pred)) * 1.1]),  # lock range with buffer
                             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5,
                                         bgcolor="rgba(255,255,255,0.7)", bordercolor="gray", borderwidth=1)
                         )
@@ -479,7 +489,8 @@ with tab1:
                                                     line=dict(color="black", dash="dash")))
                         fig_inc.update_layout(
                             template="simple_white", height=300, margin=dict(l=40, r=10, t=30, b=30),
-                            xaxis_title="Month", yaxis_title="Incidence",
+                            xaxis_title="Month(s)", yaxis_title="Incidence",
+                            yaxis=dict(range=[0, max(max(inc), max(inc_pred)) * 1.1]),
                             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5,
                                         bgcolor="rgba(255,255,255,0.7)", bordercolor="gray", borderwidth=1)
                         )
@@ -490,12 +501,14 @@ with tab1:
                         fig_prev = ts_fig(t, prev, "Prevalence (observed.)", COLORS["prev"], show_markers=True)
                         fig_prev.update_layout(
                             height=300, margin=dict(l=40, r=10, t=30, b=30),
+                            yaxis=dict(range=[0, max(prev) * 1.1]),
                             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
-                            showlegend=False  # no legend, but reserves same space
+                            showlegend=False
                         )
                         st.plotly_chart(fig_prev, use_container_width=True)
 
                     st.success("✅ MARLIN inferred EIR and Incidence from prevalence alone — overlaid with ground truth for validation.")
+
 
 
             # ------------------- BOTTOM CONTROLS -------------------
