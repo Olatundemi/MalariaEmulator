@@ -347,10 +347,20 @@ with tab1:
         st.header("💡 The Big Idea")
         st.markdown("**1) The promise of ANC data**  \n"
                     "ANC testing is continuous and widespread, giving a dense, routine prevalence signal for program-relevant decisions.")
-        st.markdown("**2) The challenge**  \n"
+        st.markdown("**2) The hallenge**  \n"
                     "Prevalence lags & smooths upstream dynamics. You cannot read it as real-time transmission.")
         if ILL.exists():
-            st.image(str(ILL), caption="Illustrative example: lags between EIR → incidence → prevalence.")
+            st.image(str(ILL))  # no caption here
+
+            st.markdown(
+                """
+                <div style="text-align: justify; font-size: 0.9em; color: rgba(0,0,0,0.5); margin-bottom: 1em;">
+                Illustrative example: Prevalence is a smoothed, lagged indicator. In seasonal settings, the same prevalence level can occur both while incidence is rapidly rising during the transmission season and when incidence has fallen back to near zero in the off-season. Identical prevalence values (purple dots) can therefore correspond to very different underlying incidence (red dots).
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
         st.markdown("**3) Our approach**  \n"
                     "Mechanistic inference (pMCMC) runs thousands of equations hundreds of thousands of times — many hours per site.  \n"
                     "**MARLIN hunts down our target much more efficiently** using a sequence-to-sequence neural network to perform "
@@ -403,7 +413,7 @@ with tab1:
 
                 # ----------- Display 1 -----------
                 st.markdown("**How transmission, burden and prevalence are linked**")
-                st.caption("We use the the malariasimulation framework to attempt to capture how Transmission (EIR) drives clinical incidence, which shapes infection prevalence.")
+                st.caption("We use the malariasimulation framework to attempt to capture how transmission (here expressed as the entomological inoculation rate (EIR)) drives clinical incidence, which shapes infection prevalence.")
                 c1, c2, c3 = st.columns(3)
                 with c2: st.plotly_chart(ts_fig(t, eir, "EIR", COLORS["eir"]), use_container_width=True)
                 with c3: st.plotly_chart(ts_fig(t, inc, "Incidence", COLORS["inc"]), use_container_width=True)
@@ -411,12 +421,12 @@ with tab1:
                 
 
                 # ----------- Display 2 -----------
-                st.markdown("**What we actually see (observations)**")
-                st.caption("Here we asssume we only observe prevalnce (e..g ANC) and want to reconstruct transmision and burden using our mechanistic understanding of these relationships")
+                st.markdown("**What we actually see**")
+                st.caption("Here we assume we only observe prevalence (e.g. ANC) and aim to reconstruct transmission and burden using our mechanistic understanding of these relationships.")
                 c1, c2, c3 = st.columns(3)
-                with c1: st.plotly_chart(ts_fig(t, eir, "EIR (hidden)", COLORS["eir"], show_markers=True, opacity=0.12), use_container_width=True)
-                with c2: st.plotly_chart(ts_fig(t, inc, "Incidence (hidden)", COLORS["inc"], show_markers=True, opacity=0.12), use_container_width=True)
-                with c3: st.plotly_chart(ts_fig(t, prev, "Prevalence (observed)", COLORS["prev"], show_markers=True, opacity=1.0), use_container_width=True)
+                with c2: st.plotly_chart(ts_fig(t, eir, "EIR (to estimate)", COLORS["eir"], show_markers=True, opacity=0.25), use_container_width=True)
+                with c3: st.plotly_chart(ts_fig(t, inc, "Incidence (to estimate)", COLORS["inc"], show_markers=True, opacity=0.25), use_container_width=True)
+                with c1: st.plotly_chart(ts_fig(t, prev, "Prevalence (observed)", COLORS["prev"], show_markers=True, opacity=1.0), use_container_width=True)
                 
 
                 # ----------- Display 3 -----------
