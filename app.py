@@ -229,7 +229,7 @@ def plot_predictions(run_results, run_column, time_column, selected_runs,
             x_vals = time_values_plot
 
             if true is not None:
-                ax.plot(x_vals, true, color="black", linestyle="-", label=f"True {title}", linewidth=2)
+                ax.plot(x_vals, true, color="purple", linestyle="-", label=f"True {title}", linewidth=2.5)
             if title != "Prevalence" and pred is not None:
                 ax.plot(x_vals, pred, linestyle="--", color=color, label=f"Estimated {title}", linewidth=2.5)
 
