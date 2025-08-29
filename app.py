@@ -356,7 +356,7 @@ with tab1:
         st.header("💡 The Big Idea")
         st.markdown("**1) The promise of ANC data**  \n"
                     "ANC testing is continuous and widespread, giving a dense, routine prevalence signal for program-relevant decisions.")
-        st.markdown("**2) The Challenge**  \n"
+        st.markdown("**2) The challenge**  \n"
                     "Prevalence lags & smooths upstream dynamics. You cannot read it as real-time transmission.")
         if ILL.exists():
             st.image(str(ILL))  # no caption here
@@ -391,8 +391,8 @@ with tab1:
             # Left controls, right placeholder
             colA, colB = st.columns([1, 2])
             with colA:
-                n = st.number_input("🎲 Pick any number:", value=7, step=1)
-                if st.button("Pick simulation"):
+                n = st.number_input("🎲 Select any number:", value=7, step=1)
+                if st.button("Select simulation"):
                     _, run = pick_remote_simulation(n)
                     st.session_state["picked_run"] = run
                     st.session_state["released"] = False
@@ -517,7 +517,7 @@ with tab1:
                 colX, colY, colZ = st.columns(3)
 
                 with colX:
-                    if st.button("Pick simulation", key="pick_bottom"):
+                    if st.button("Load simulation", key="pick_bottom"):
                         _, run = pick_remote_simulation(st.session_state.get("n_bottom", n))
                         st.session_state["picked_run"] = run
                         st.session_state["released"] = False
