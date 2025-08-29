@@ -392,7 +392,7 @@ with tab1:
             colA, colB = st.columns([1, 2])
             with colA:
                 n = st.number_input("🎲 Select any number:", value=7, step=1)
-                if st.button("Select simulation"):
+                if st.button("Load simulation"):
                     _, run = pick_remote_simulation(n)
                     st.session_state["picked_run"] = run
                     st.session_state["released"] = False
