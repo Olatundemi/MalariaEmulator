@@ -452,14 +452,16 @@ with tab1:
                     eir_pred = result["eir_preds_unscaled"][:, 0]
                     inc_pred = result["inc_preds_unscaled"][:, 0]
 
-                    # Overlay plots with fixed-size legends
+                    # Overlay plots with fixed-size legends 
                     c1, c2, c3 = st.columns(3)
 
                     # EIR
                     with c2:
                         fig_eir = go.Figure()
-                        fig_eir.add_trace(go.Scatter(x=t, y=eir, mode="lines", name="True", line=dict(color=COLORS["eir"], width=2)))
-                        fig_eir.add_trace(go.Scatter(x=t[:len(eir_pred)], y=eir_pred, mode="lines", name="Inferred", line=dict(color="black", dash="dash")))
+                        fig_eir.add_trace(go.Scatter(x=t, y=eir, mode="lines", name="True",
+                                                    line=dict(color=COLORS["eir"], width=2)))
+                        fig_eir.add_trace(go.Scatter(x=t[:len(eir_pred)], y=eir_pred, mode="lines", name="Inferred",
+                                                    line=dict(color="black", dash="dash")))
                         fig_eir.update_layout(
                             template="simple_white", height=300, margin=dict(l=40, r=10, t=30, b=30),
                             xaxis_title="Month", yaxis_title="EIR",
@@ -471,8 +473,10 @@ with tab1:
                     # Incidence
                     with c3:
                         fig_inc = go.Figure()
-                        fig_inc.add_trace(go.Scatter(x=t, y=inc, mode="lines", name="True", line=dict(color=COLORS["inc"], width=2)))
-                        fig_inc.add_trace(go.Scatter(x=t[:len(inc_pred)], y=inc_pred, mode="lines", name="Inferred", line=dict(color="black", dash="dash")))
+                        fig_inc.add_trace(go.Scatter(x=t, y=inc, mode="lines", name="True",
+                                                    line=dict(color=COLORS["inc"], width=2)))
+                        fig_inc.add_trace(go.Scatter(x=t[:len(inc_pred)], y=inc_pred, mode="lines", name="Inferred",
+                                                    line=dict(color="black", dash="dash")))
                         fig_inc.update_layout(
                             template="simple_white", height=300, margin=dict(l=40, r=10, t=30, b=30),
                             xaxis_title="Month", yaxis_title="Incidence",
@@ -483,10 +487,16 @@ with tab1:
 
                     # Prevalence
                     with c1:
-                        st.plotly_chart(ts_fig(t, prev, "Prevalence (observed.)", COLORS["prev"], show_markers=True),
-                                        use_container_width=True)
+                        fig_prev = ts_fig(t, prev, "Prevalence (observed.)", COLORS["prev"], show_markers=True)
+                        fig_prev.update_layout(
+                            height=300, margin=dict(l=40, r=10, t=30, b=30),
+                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+                            showlegend=False  # no legend, but reserves same space
+                        )
+                        st.plotly_chart(fig_prev, use_container_width=True)
 
                     st.success("✅ MARLIN inferred EIR and Incidence from prevalence alone — overlaid with ground truth for validation.")
+
 
             # ------------------- BOTTOM CONTROLS -------------------
             with colB:
