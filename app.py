@@ -424,9 +424,9 @@ with tab1:
                 st.markdown("**How transmission, burden and prevalence are linked**")
                 st.caption("We use the malariasimulation framework to attempt to capture how transmission (here expressed as the entomological inoculation rate (EIR)) drives clinical incidence, which shapes infection prevalence.")
                 c1, c2, c3 = st.columns(3)
-                with c2: st.plotly_chart(ts_fig(t, eir, "EIR", COLORS["eir"]), use_container_width=True)
-                with c3: st.plotly_chart(ts_fig(t, inc, "Incidence", COLORS["inc"]), use_container_width=True)
-                with c1: st.plotly_chart(ts_fig(t, prev, "Prevalence", COLORS["prev"]), use_container_width=True)
+                with c1: st.plotly_chart(ts_fig(t, eir, "EIR", COLORS["eir"]), use_container_width=True)
+                with c2: st.plotly_chart(ts_fig(t, inc, "Incidence", COLORS["inc"]), use_container_width=True)
+                with c3: st.plotly_chart(ts_fig(t, prev, "Prevalence", COLORS["prev"]), use_container_width=True)
                 
 
                 # ----------- Display 2 -----------
