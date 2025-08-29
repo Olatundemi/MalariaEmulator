@@ -356,7 +356,7 @@ with tab1:
         st.header("💡 The Big Idea")
         st.markdown("**1) The promise of ANC data**  \n"
                     "ANC testing is continuous and widespread, giving a dense, routine prevalence signal for program-relevant decisions.")
-        st.markdown("**2) The hallenge**  \n"
+        st.markdown("**2) The Challenge**  \n"
                     "Prevalence lags & smooths upstream dynamics. You cannot read it as real-time transmission.")
         if ILL.exists():
             st.image(str(ILL))  # no caption here
