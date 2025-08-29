@@ -410,7 +410,7 @@ with tab1:
             # After first pick → full-width
             colB = st.container()
             with colB:
-                n = st.number_input("🎲 Pick any number:", value=7, step=1, key="n_bottom")
+                n = st.number_input("🎲 Select a  number:", value=7, step=1, key="n_bottom")
 
             # ------------------- PLOT DISPLAYS -------------------
             if st.session_state["picked_run"] is not None:
