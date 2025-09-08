@@ -357,7 +357,7 @@ with tab1:
         st.markdown("**1) The promise of ANC data**  \n"
                     "ANC testing is continuous and widespread, giving a dense, routine prevalence signal for program-relevant decisions.")
         st.markdown("**2) The challenge**  \n"
-                    "Prevalence lags & smooths upstream dynamics. You cannot read it as real-time transmission.")
+                    "Prevalence lags and smooths upstream dynamics. You cannot read it as real-time transmission.")
         if ILL.exists():
             st.image(str(ILL))  # no caption here
 
@@ -371,9 +371,9 @@ with tab1:
             )
 
         st.markdown("**3) Our approach**  \n"
-                    "Mechanistic inference (pMCMC) runs thousands of equations hundreds of thousands of times — many hours per site.  \n"
+                    "Mechanistic inference (pMCMC) runs thousands of equations hundreds of thousands of times - many hours per site.  \n"
                     "**MARLIN hunts down our target much more efficiently** using a sequence-to-sequence neural network to perform "
-                    "learning-based inference from the **entire prevalence trajectory** — in seconds.")
+                    "learning-based inference from the **entire prevalence trajectory** - in seconds.")
 
     with right:
         st.header("How it Works ⚙️")
@@ -540,7 +540,7 @@ with tab1:
 
 
     st.markdown("---")
-    st.header("What this is — and isn’t")
+    st.header("What this is - and isn’t")
     st.markdown("**MARLIN is:** an emulator trained on mechanistic models; a fast, accurate way to turn ANC prevalence into transmission & burden; scalable and decision-relevant.")
     st.markdown("**MARLIN isn’t:** a replacement for mechanistic research; a universal forecaster; a substitute for expert interpretation.")
 
