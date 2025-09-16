@@ -49,7 +49,7 @@ def ts_fig(t, y, title, color, show_markers=False, opacity=1.0):
     fig.update_layout(
         height=240,
         margin=dict(l=40, r=10, t=30, b=30),
-        xaxis_title="Month",
+        xaxis_title="Month(s)",
         yaxis_title=title,
         template="simple_white"
     )
@@ -229,7 +229,7 @@ def plot_predictions(run_results, run_column, time_column, selected_runs,
             x_vals = time_values_plot
 
             if true is not None:
-                ax.plot(x_vals, true, color="black", linestyle="-", label=f"True {title}", linewidth=2)
+                ax.plot(x_vals, true, color="purple", linestyle="-", label=f"True {title}", linewidth=2.5)
             if title != "Prevalence" and pred is not None:
                 ax.plot(x_vals, pred, linestyle="--", color=color, label=f"Estimated {title}", linewidth=2.5)
 
@@ -249,6 +249,15 @@ def plot_predictions(run_results, run_column, time_column, selected_runs,
                 "Estimated Incidence": plot_data[2]["pred"]
             })
             data_to_download.append(df_export)
+
+    for ax in axes[-1]:
+        if is_string_time:
+            tick_indices = np.arange(0, len(time_values_plot), step=6, dtype=int)
+            ax.set_xticks(time_values_plot[tick_indices])
+            ax.set_xticklabels(np.array(time_labels)[tick_indices], rotation=45, fontsize=10)
+        else:
+            ax.set_xlabel("Years", fontsize=12)
+
 
     plt.tight_layout()
     st.pyplot(fig)
@@ -344,83 +353,196 @@ with tab1:
     left, right = st.columns([1, 2])
 
     with left:
-        st.header("How it works")
+        st.header("💡 The Big Idea")
         st.markdown("**1) The promise of ANC data**  \n"
                     "ANC testing is continuous and widespread, giving a dense, routine prevalence signal for program-relevant decisions.")
         st.markdown("**2) The challenge**  \n"
-                    "Prevalence lags & smooths upstream dynamics. You cannot read it as real-time transmission.")
+                    "Prevalence lags and smooths upstream dynamics. You cannot read it as real-time transmission.")
         if ILL.exists():
-            st.image(str(ILL), caption="Illustrative example: lags between EIR → incidence → prevalence.")
+            st.image(str(ILL))  # no caption here
+
+            st.markdown(
+                """
+                <div style="text-align: justify; font-size: 0.9em; color: rgba(0,0,0,0.5); margin-bottom: 1em;">
+                Illustrative example: Prevalence is a smoothed, lagged indicator. In seasonal settings, the same prevalence level can occur both while incidence is rapidly rising during the transmission season and when incidence has fallen back to near zero in the off-season. Identical prevalence values (purple dots) can therefore correspond to very different underlying incidence (red dots).
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
         st.markdown("**3) Our approach**  \n"
-                    "Mechanistic inference (pMCMC) runs thousands of equations hundreds of thousands of times — many hours per site.  \n"
+                    "Mechanistic inference (pMCMC) runs thousands of equations hundreds of thousands of times - many hours per site.  \n"
                     "**MARLIN hunts down our target much more efficiently** using a sequence-to-sequence neural network to perform "
-                    "learning-based inference from the **entire prevalence trajectory** — in seconds.")
+                    "learning-based inference from the **entire prevalence trajectory** - in seconds.")
 
     with right:
-        st.header("Worked example — Roll up, roll up 🎪")
-        colA, colB = st.columns([1, 2])
+        st.header("How it Works ⚙️")
 
-        with colA:
-            if "picked_run" not in st.session_state:
-                st.session_state["picked_run"] = None
-            if "released" not in st.session_state:
-                st.session_state["released"] = False
+        # ------------------- SESSION STATE -------------------
+        if "picked_run" not in st.session_state:
+            st.session_state["picked_run"] = None
+        if "released" not in st.session_state:
+            st.session_state["released"] = False
+        if "buttons_moved" not in st.session_state:
+            st.session_state["buttons_moved"] = False
 
-            n = st.number_input("🎲 Pick any number:", value=7, step=1)
-            if st.button("Pick simulation"):
-                _, run = pick_remote_simulation(n)
-                st.session_state["picked_run"] = run
-                st.session_state["released"] = False
-            #if st.button("Release MARLIN 🐟"):
-            #    st.session_state["released"] = True
-            if st.button("Reset"):
-                st.session_state["picked_run"] = None
-                st.session_state["released"] = False
+        # ------------------- INITIAL LAYOUT -------------------
+        if not st.session_state["buttons_moved"]:
+            # Left controls, right placeholder
+            colA, colB = st.columns([1, 2])
+            with colA:
+                n = st.number_input("🎲 Select any number:", value=7, step=1)
+                if st.button("Load simulation"):
+                    _, run = pick_remote_simulation(n)
+                    st.session_state["picked_run"] = run
+                    st.session_state["released"] = False
+                    st.session_state["buttons_moved"] = True
+                    st.rerun()  # 🔑 immediate rerun to full-width mode
 
-            if st.session_state["released"] and MARLIN_IMG.exists():
-                st.image(str(MARLIN_IMG), caption="MARLIN unleashed!", use_container_width=True)
-            elif not st.session_state["released"] and CAGE.exists():
-                st.image(str(CAGE), caption="(MARLIN is ready...)", use_container_width=True)
+                if not st.session_state["released"] and CAGE.exists():
+                    st.image(str(CAGE), caption="(MARLIN is ready...)", use_container_width=True)
 
-        if st.session_state["picked_run"] is None:
-            colB.info("Pick a number to select a run from remote dataset.")
+            # Placeholder for instructions before pick
+            if st.session_state["picked_run"] is None:
+                colB.info("Pick a number to select a run from remote dataset.")
+
         else:
-            sim = REMOTE_DF[REMOTE_DF['run'] == st.session_state["picked_run"]]
-            t = np.arange(len(sim))
-            eir = sim['EIR_true'].values if 'EIR_true' in sim else np.zeros_like(t)
-            inc = sim['incall'].values if 'incall' in sim else np.zeros_like(t)
-            prev = sim['prev_true'].values
-
+            # After first pick → full-width
+            colB = st.container()
             with colB:
-                st.markdown("**Display 1 — The full picture (mechanistic model)**")
-            c1, c2, c3 = st.columns(3)
-            with c1: st.plotly_chart(ts_fig(t, eir, "EIR", COLORS["eir"]), use_container_width=True)
-            with c2: st.plotly_chart(ts_fig(t, inc, "Incidence", COLORS["inc"]), use_container_width=True)
-            with c3: st.plotly_chart(ts_fig(t, prev, "Prevalence", COLORS["prev"]), use_container_width=True)
-            colB.caption("Transmission (EIR) drives clinical incidence, which shapes infection prevalence.")
+                n = st.number_input("🎲 Select a  number:", value=7, step=1, key="n_bottom")
 
-            with colB:
-                st.markdown("**Display 2 — What we actually see (observations)**")
-            c1, c2, c3 = st.columns(3)
-            with c1: st.plotly_chart(ts_fig(t, eir, "EIR (hidden)", COLORS["eir"], show_markers=True, opacity=0.12), use_container_width=True)
-            with c2: st.plotly_chart(ts_fig(t, inc, "Incidence (hidden)", COLORS["inc"], show_markers=True, opacity=0.12), use_container_width=True)
-            with c3: st.plotly_chart(ts_fig(t, prev, "Prevalence (observed)", COLORS["prev"], show_markers=True, opacity=1.0), use_container_width=True)
-            colB.caption("In practice, we observe prevalence (e.g., ANC). Transmission and incidence remain hidden without modelling.")
+            # ------------------- PLOT DISPLAYS -------------------
+            if st.session_state["picked_run"] is not None:
+                sim = REMOTE_DF[REMOTE_DF['run'] == st.session_state["picked_run"]]
+                t = np.arange(len(sim))
+                eir = sim['EIR_true'].values if 'EIR_true' in sim else np.zeros_like(t)
+                inc = sim['incall'].values if 'incall' in sim else np.zeros_like(t)
+                prev = sim['prev_true'].values
 
-            if st.session_state["released"]:
-                with colB:
-                    st.markdown("**Display 3 — MARLIN reconstruction (from prevalence only)**")
+                # ----------- Display 1 -----------
+                st.markdown("**How transmission, burden and prevalence are linked**")
+                st.caption("We use the malariasimulation framework to attempt to capture how transmission (here expressed as the entomological inoculation rate (EIR)) drives clinical incidence, which shapes infection prevalence.")
                 c1, c2, c3 = st.columns(3)
-                with c1: st.plotly_chart(ts_fig(t, eir, "EIR (inferred)", COLORS["eir"]), use_container_width=True)
-                with c2: st.plotly_chart(ts_fig(t, inc, "Incidence (inferred)", COLORS["inc"]), use_container_width=True)
-                with c3: st.plotly_chart(ts_fig(t, prev, "Prevalence (fitted)", COLORS["prev"]), use_container_width=True)
-                colB.success("MARLIN is given only prevalence and infers the transmission intensity (and associated burden) needed to produce it — in seconds.")
+                with c1: st.plotly_chart(ts_fig(t, eir, "EIR", COLORS["eir"]), use_container_width=True)
+                with c2: st.plotly_chart(ts_fig(t, inc, "Incidence", COLORS["inc"]), use_container_width=True)
+                with c3: st.plotly_chart(ts_fig(t, prev, "Prevalence", COLORS["prev"]), use_container_width=True)
+                
+
+                # ----------- Display 2 -----------
+                st.markdown("**What we actually see**")
+                st.caption("Here we assume we only observe prevalence (e.g. ANC) and aim to reconstruct transmission and burden using our mechanistic understanding of these relationships.")
+                c1, c2, c3 = st.columns(3)
+                with c2: st.plotly_chart(ts_fig(t, eir, "EIR (to estimate)", COLORS["eir"], show_markers=True, opacity=0.25), use_container_width=True)
+                with c3: st.plotly_chart(ts_fig(t, inc, "Incidence (to estimate)", COLORS["inc"], show_markers=True, opacity=0.25), use_container_width=True)
+                with c1: st.plotly_chart(ts_fig(t, prev, "Prevalence (observed)", COLORS["prev"], show_markers=True, opacity=1.0), use_container_width=True)
+                
+
+                # ----------- Display 3 -----------
+                if st.session_state["released"]:
+                    st.markdown("**MARLIN reconstruction (from ANC prevalence only)**")
+
+                    # Load models
+                    window_size = 10
+                    model_eir_path = "src/trained_model/shifting_sequences/LSTM_EIR_4_layers_10000run_W10.pth"
+                    model_inc_path = "src/trained_model/causal/LSTM_Incidence_3_layers_15000run_causal_W10.pth"
+                    model_eir, model_inc, device = load_models(model_eir_path, model_inc_path)
+
+                    # Prepare data
+                    filtered_data = adjust_trailing_zero_prevalence(sim, prevalence_column='prev_true', seed=42)
+                    df_scaled, has_true_values = preprocess_data(filtered_data)
+
+                    run_results = generate_predictions_per_run(
+                        filtered_data, [st.session_state["picked_run"]], "run", window_size,
+                        model_eir, model_inc, device, has_true_values
+                    )
+
+                    result = run_results[st.session_state["picked_run"]]
+                    eir_pred = result["eir_preds_unscaled"][:, 0]
+                    inc_pred = result["inc_preds_unscaled"][:, 0]
+
+                    # Overlay plots with fixed-size legends 
+                    c1, c2, c3 = st.columns(3)
+
+                    # EIR
+                    with c2:
+                        fig_eir = go.Figure()
+                        fig_eir.add_trace(go.Scatter(x=t, y=eir, mode="lines", name="True",
+                                                    line=dict(color=COLORS["eir"], width=2)))
+                        fig_eir.add_trace(go.Scatter(x=t[:len(eir_pred)], y=eir_pred, mode="lines", name="Inferred",
+                                                    line=dict(color="black", dash="dash")))
+                        fig_eir.update_layout(
+                            template="simple_white", height=300, margin=dict(l=40, r=10, t=30, b=30),
+                            xaxis_title="Month(s)", yaxis_title="EIR",
+                            yaxis=dict(range=[0, max(max(eir), max(eir_pred)) * 1.1]),  # lock range with buffer
+                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5,
+                                        bgcolor="rgba(255,255,255,0.7)", bordercolor="gray", borderwidth=1)
+                        )
+                        st.plotly_chart(fig_eir, use_container_width=True)
+
+                    # Incidence
+                    with c3:
+                        fig_inc = go.Figure()
+                        fig_inc.add_trace(go.Scatter(x=t, y=inc, mode="lines", name="True",
+                                                    line=dict(color=COLORS["inc"], width=2)))
+                        fig_inc.add_trace(go.Scatter(x=t[:len(inc_pred)], y=inc_pred, mode="lines", name="Inferred",
+                                                    line=dict(color="black", dash="dash")))
+                        fig_inc.update_layout(
+                            template="simple_white", height=300, margin=dict(l=40, r=10, t=30, b=30),
+                            xaxis_title="Month(s)", yaxis_title="Incidence",
+                            yaxis=dict(range=[0, max(max(inc), max(inc_pred)) * 1.1]),
+                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5,
+                                        bgcolor="rgba(255,255,255,0.7)", bordercolor="gray", borderwidth=1)
+                        )
+                        st.plotly_chart(fig_inc, use_container_width=True)
+
+                    # Prevalence
+                    with c1:
+                        fig_prev = ts_fig(t, prev, "Prevalence (observed.)", COLORS["prev"], show_markers=True)
+                        fig_prev.update_layout(
+                            height=300, margin=dict(l=40, r=10, t=30, b=30),
+                            yaxis=dict(range=[0, max(prev) * 1.1]),
+                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+                            showlegend=False
+                        )
+                        st.plotly_chart(fig_prev, use_container_width=True)
+
+                    st.success("✅ MARLIN inferred EIR and Incidence from prevalence alone — overlaid with ground truth for validation.")
+
+
+
+            # ------------------- BOTTOM CONTROLS -------------------
+            with colB:
+                st.markdown("---")
+                colX, colY, colZ = st.columns(3)
+
+                with colX:
+                    if st.button("Load simulation", key="pick_bottom"):
+                        _, run = pick_remote_simulation(st.session_state.get("n_bottom", n))
+                        st.session_state["picked_run"] = run
+                        st.session_state["released"] = False
+                        st.rerun()  # 🔑 immediate refresh
+
+                with colY:
+                    if st.session_state["picked_run"] is not None:
+                        if st.button("Unleash MARLIN 🐟", key="unleash_bottom"):
+                            st.session_state["released"] = True
+                            st.rerun()  # 🔑 immediate refresh
+
+                with colZ:
+                    if st.session_state["picked_run"] is not None:
+                        if st.button("Reset", key="reset_bottom"):
+                            st.session_state["picked_run"] = None
+                            st.session_state["released"] = False
+                            st.session_state["buttons_moved"] = False
+                            st.rerun()  # 🔑 immediate refresh
+
+
 
     st.markdown("---")
-    st.header("What this is — and isn’t")
+    st.header("What this is - and isn’t")
     st.markdown("**MARLIN is:** an emulator trained on mechanistic models; a fast, accurate way to turn ANC prevalence into transmission & burden; scalable and decision-relevant.")
     st.markdown("**MARLIN isn’t:** a replacement for mechanistic research; a universal forecaster; a substitute for expert interpretation.")
-    #st.markdown("**Next:** See the FAQ for data needs, accuracy, and interpretation guidance.")
 
 # ---------------- Upload & Run Predictions ----------------
 with tab2:
@@ -484,3 +606,30 @@ with tab2:
                 )
     else:
         st.info("Please upload a dataset to proceed.")
+
+with tab3:
+    st.header("💡 Frequently Asked Questions")
+
+    with st.expander("1️⃣ What is MARLIN?"):
+        st.write(
+            "MARLIN is an emulator trained on mechanistic models, "
+            "designed to infer malaria transmission dynamics from ANC prevalence data."
+        )
+
+    with st.expander("2️⃣ What data do I need?"):
+        st.write(
+            "You need ANC prevalence time series. "
+            "The emulator is flexible but works best with clean, routine prevalence data across time."
+        )
+
+    with st.expander("3️⃣ How accurate is MARLIN?"):
+        st.write(
+            "It has been benchmarked against mechanistic models and shown to capture "
+            "transmission and incidence dynamics efficiently in seconds."
+        )
+
+    with st.expander("4️⃣ Is MARLIN a replacement for mechanistic models?"):
+        st.write(
+            "No. MARLIN complements mechanistic models by providing rapid, approximate "
+            "inference that supports decision-making at scale."
+        )

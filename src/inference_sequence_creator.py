@@ -61,6 +61,46 @@ def create_sequences(data, window_size):
     else:
         return torch.tensor(xs), None  # Return None for ys if targets are missing
 
+st.cache_data
+def create_sequences_assymetric(data, window_size):
+    xs, ys = [], []
+    has_targets = all(col in data.columns for col in ['EIR_true'])  #, 'incall'# Check if target columns exist
+
+    sequence_col = ['prev_true']
+    half_window_size = int(np.ceil(window_size / 2)) 
+
+    for i in range(len(data)):
+        if i + half_window_size >= len(data):
+            break  # Not enough future steps
+
+        # Prepare padding near the beginning
+        if i < window_size:
+            pad_size = window_size - i
+            first_value = data.iloc[0][sequence_col].values.reshape(1, -1)
+            pad_values = np.tile(first_value, (pad_size, 1))
+
+            # actual values up to current + half_window_size
+            actual_values = data.iloc[0:i + half_window_size + 1][sequence_col].values
+            x_values = np.concatenate((pad_values, actual_values), axis=0)
+        else:
+            # Extract window before, current, and after
+            start_idx = i - window_size
+            end_idx = i + half_window_size + 1  # exclusive
+            x_values = data.iloc[start_idx:end_idx][sequence_col].values
+
+        xs.append(x_values.flatten())
+
+        if has_targets:
+            y = data.iloc[i][['EIR_true']].values#, 'incall'
+            ys.append(y)
+
+    xs = np.array(xs, dtype=np.float32)
+
+    if has_targets:
+        ys = np.array(ys, dtype=np.float32)
+        return torch.tensor(xs), torch.tensor(ys)
+    else:
+        return torch.tensor(xs), None  # Return None for ys if targets are missing
 
 def create_sequences_in_parallel(features, targets, window_size):
     xs, ys = [], []
@@ -188,3 +228,35 @@ def create_sequences_with_separate_scalar(data, window_size):
         return x_seq, x_scalar, y
     else:
         return x_seq, x_scalar, None
+
+def create_causal_sequences(data, window_size, features=['prev_true', 'EIR_true']):
+    xs, ys = [], []
+    feature_data = data[features].to_numpy()
+
+    has_target = 'incall' in data.columns  # check if incidence is in the data
+
+    for i in range(len(data)):
+        if i < window_size:
+            # Pad with the first row
+            pad_size = window_size - i
+            first_row = feature_data[0].reshape(1, -1)
+            padding = np.tile(first_row, (pad_size, 1))
+            actual = feature_data[0:i+1]  # from 0 to i (inclusive)
+            x_values = np.concatenate((padding, actual), axis=0)
+        else:
+            x_values = feature_data[i - window_size:i + 1]
+
+        xs.append(x_values)
+
+        # Only append target if it's available
+        if has_target:
+            y = data.iloc[i]['incall']
+            ys.append([y])
+
+    xs = torch.tensor(np.array(xs), dtype=torch.float32)  
+
+    if has_target:
+        ys = torch.tensor(np.array(ys), dtype=torch.float32)
+        return xs, ys
+    else:
+        return xs, None
