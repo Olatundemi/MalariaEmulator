@@ -1,4 +1,3 @@
-# app.py
 import streamlit as st
 import numpy as np
 import pandas as pd
@@ -11,7 +10,6 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import hashlib
 
-# Import your inference tools
 from src.inference_sequence_creator import create_sequences, create_causal_sequences
 from src.inference_model_exp import LSTM_EIR, LSTM_Incidence
 
