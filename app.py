@@ -10,7 +10,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import hashlib
 
-from src.inference_sequence_creator import create_sequences, create_causal_sequences
+from src.inference_sequence_creator import create_sequences_assymetric, create_causal_sequences
 from src.inference_model_exp import LSTM_EIR, LSTM_Incidence
 
 # ---------------- Page config ----------------
@@ -114,7 +114,7 @@ def generate_predictions_per_run(data, selected_runs, run_column, window_size, _
         if scaled_data is None:
             continue
 
-        X_eir_scaled, y_eir = create_sequences(scaled_data, window_size)
+        X_eir_scaled, y_eir = create_sequences_assymetric(scaled_data, window_size)
         if len(X_eir_scaled) == 0:
             continue
 
@@ -163,7 +163,7 @@ def compute_global_yaxis_limits(run_results):
 
     return (prev_min, prev_max), (eir_min, eir_max), (inc_min, inc_max)
 
-def plot_predictions(run_results, run_column, time_column, selected_runs, 
+def plot_predictions(run_results, run_column, time_column, selected_runs,
                      log_eir, log_inc, log_all, prev_limits, eir_limits, inc_limits):
     is_string_time = not pd.api.types.is_numeric_dtype(
         next(iter(run_results.values()))['original_data'][time_column]
@@ -204,7 +204,8 @@ def plot_predictions(run_results, run_column, time_column, selected_runs,
 
         plot_data = [
             {"title": "Prevalence", "pred": None, "true": run_data['prev_true'].values[:min_len]},
-            {"title": "EIR", "pred": eir_preds_unscaled[:min_len, 0], "true": y_eir_unscaled[:min_len, 0] if y_eir_unscaled is not None else None},
+            {"title": "EIR", "pred": eir_preds_unscaled[:min_len, 0],
+             "true": y_eir_unscaled[:min_len, 0] if y_eir_unscaled is not None else None},
             {"title": "Incidence", "pred": inc_preds_unscaled[:min_len, 0], "true": None}
         ]
 
@@ -220,6 +221,7 @@ def plot_predictions(run_results, run_column, time_column, selected_runs,
             "Incidence": (inc_min, inc_max)
         }
 
+        # plot all three subplots
         for ax, data, color in zip(axes[i], plot_data, colors):
             title = data["title"]
             pred = data["pred"]
@@ -239,15 +241,17 @@ def plot_predictions(run_results, run_column, time_column, selected_runs,
             ax.set_ylabel(title, fontsize=12)
             ax.legend()
 
-            df_export = pd.DataFrame({
-                "run": run,
-                "time": run_data[time_column].values[:min_len],
-                "Prevalence": plot_data[0]["true"],
-                "Estimated EIR": plot_data[1]["pred"],
-                "Estimated Incidence": plot_data[2]["pred"]
-            })
-            data_to_download.append(df_export)
+        # build dataframe for download once per run (outside plotting loop)
+        df_export = pd.DataFrame({
+            "run": run,
+            "time": run_data[time_column].values[:min_len],
+            "Prevalence": plot_data[0]["true"],
+            "Estimated EIR": plot_data[1]["pred"],
+            "Estimated Incidence": plot_data[2]["pred"]
+        })
+        data_to_download.append(df_export)
 
+    # handle x-axis labels on last row
     for ax in axes[-1]:
         if is_string_time:
             tick_indices = np.arange(0, len(time_values_plot), step=6, dtype=int)
@@ -256,10 +260,10 @@ def plot_predictions(run_results, run_column, time_column, selected_runs,
         else:
             ax.set_xlabel("Years", fontsize=12)
 
-
     plt.tight_layout()
     st.pyplot(fig)
 
+    # combine and download
     if data_to_download:
         combined_data = pd.concat(data_to_download, ignore_index=True)
         csv_data = combined_data.to_csv(index=False).encode('utf-8')
@@ -442,7 +446,7 @@ with tab1:
 
                     # Load models
                     window_size = 10
-                    model_eir_path = "src/trained_model/shifting_sequences/LSTM_EIR_4_layers_10000run_W10.pth"
+                    model_eir_path = "src/trained_model/causal/LSTM_EIR_4_layers_new_assymetric_9500runs_prevall.pth" #shifting_sequences/LSTM_EIR_4_layers_10000run_W10.pth
                     model_inc_path = "src/trained_model/causal/LSTM_Incidence_3_layers_15000run_causal_W10.pth"
                     model_eir, model_inc, device = load_models(model_eir_path, model_inc_path)
 
