@@ -65,28 +65,19 @@ st.cache_data
 def create_sequences_assymetric(data, window_size):
     xs, ys = [], []
     has_targets = all(col in data.columns for col in ['EIR_true'])  #, 'incall'# Check if target columns exist
+    half_window_size = int(np.ceil(window_size / 2))
 
-    sequence_col = ['prev_true']
-    half_window_size = int(np.ceil(window_size / 2)) 
-
-    for i in range(len(data)):
-        if i + half_window_size >= len(data):
-            break  # Not enough future steps
-
-        # Prepare padding near the beginning
+    for i in range(len(data)-half_window_size):
+        # if i + half_window_size >= len(data):
+        #     break  # Not enough future steps
         if i < window_size:
+            # Pad beginning of sequence
             pad_size = window_size - i
-            first_value = data.iloc[0][sequence_col].values.reshape(1, -1)
-            pad_values = np.tile(first_value, (pad_size, 1))
-
-            # actual values up to current + half_window_size
-            actual_values = data.iloc[0:i + half_window_size + 1][sequence_col].values
-            x_values = np.concatenate((pad_values, actual_values), axis=0)
+            first_values = data.iloc[0][['prev_true']].values
+            replicated_values = np.tile(first_values, (pad_size, 1))
+            x_values = np.concatenate((replicated_values, data.iloc[0:i + half_window_size + 1][['prev_true']].values), axis=0)
         else:
-            # Extract window before, current, and after
-            start_idx = i - window_size
-            end_idx = i + half_window_size + 1  # exclusive
-            x_values = data.iloc[start_idx:end_idx][sequence_col].values
+            x_values = data.iloc[i - window_size:i + half_window_size + 1][['prev_true']].values
 
         xs.append(x_values.flatten())
 
@@ -101,6 +92,46 @@ def create_sequences_assymetric(data, window_size):
         return torch.tensor(xs), torch.tensor(ys)
     else:
         return torch.tensor(xs), None  # Return None for ys if targets are missing
+# st.cache_data
+# def create_sequences_assymetric(data, window_size):
+#     xs, ys = [], []
+#     has_targets = all(col in data.columns for col in ['EIR_true'])  #, 'incall'# Check if target columns exist
+
+#     sequence_col = ['prev_true']
+#     half_window_size = int(np.ceil(window_size / 2)) 
+
+#     for i in range(len(data)):
+#         if i + half_window_size >= len(data):
+#             break  # Not enough future steps
+
+#         # Prepare padding near the beginning
+#         if i < window_size:
+#             pad_size = window_size - i
+#             first_value = data.iloc[0][sequence_col].values.reshape(1, -1)
+#             pad_values = np.tile(first_value, (pad_size, 1))
+
+#             # actual values up to current + half_window_size
+#             actual_values = data.iloc[0:i + half_window_size + 1][sequence_col].values
+#             x_values = np.concatenate((pad_values, actual_values), axis=0)
+#         else:
+#             # Extract window before, current, and after
+#             start_idx = i - window_size
+#             end_idx = i + half_window_size + 1  # exclusive
+#             x_values = data.iloc[start_idx:end_idx][sequence_col].values
+
+#         xs.append(x_values.flatten())
+
+#         if has_targets:
+#             y = data.iloc[i][['EIR_true']].values#, 'incall'
+#             ys.append(y)
+
+#     xs = np.array(xs, dtype=np.float32)
+
+#     if has_targets:
+#         ys = np.array(ys, dtype=np.float32)
+#         return torch.tensor(xs), torch.tensor(ys)
+#     else:
+#         return torch.tensor(xs), None  # Return None for ys if targets are missing
 
 def create_sequences_in_parallel(features, targets, window_size):
     xs, ys = [], []
