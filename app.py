@@ -10,7 +10,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import hashlib
 
-from src.inference_sequence_creator import create_sequences_assymetric, create_causal_sequences
+from src.inference_sequence_creator import create_causal_sequences, create_sequences_assymetric
 from src.inference_model_exp import LSTM_EIR, LSTM_Incidence
 
 # ---------------- Page config ----------------
@@ -205,7 +205,7 @@ def plot_predictions(run_results, run_column, time_column, selected_runs,
         plot_data = [
             {"title": "Prevalence", "pred": None, "true": run_data['prev_true'].values[:min_len]},
             {"title": "EIR", "pred": eir_preds_unscaled[:min_len, 0],
-             "true": y_eir_unscaled[:min_len, 0] if y_eir_unscaled is not None else None},
+             "true": y_eir_unscaled[:min_len, 0] if y_eir_unscaled is not None else None}, #this should be reviewed later
             {"title": "Incidence", "pred": inc_preds_unscaled[:min_len, 0], "true": None}
         ]
 
@@ -574,7 +574,7 @@ with tab2:
 
         if selected_runs:
             window_size = 10
-            model_eir_path = "src/trained_model/shifting_sequences/LSTM_EIR_4_layers_10000run_W10.pth"
+            model_eir_path = "src/trained_model/causal/LSTM_EIR_4_layers_new_assymetric_9500runs_prevall.pth"#"src/trained_model/shifting_sequences/LSTM_EIR_4_layers_10000run_W10.pth"
             model_inc_path = "src/trained_model/causal/LSTM_Incidence_3_layers_15000run_causal_W10.pth"
             model_eir, model_inc, device = load_models(model_eir_path, model_inc_path)
 
