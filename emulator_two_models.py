@@ -361,7 +361,7 @@ data_source = st.radio("📊 Select data source", ("Upload my own data", "Use pr
 
 # Load the data accordingly
 if data_source == "Use preloaded test data":
-    remote_url = "https://raw.githubusercontent.com/Olatundemi/MalariaEmulator/main/test/ANC_Simulation_1000ANC_Simulation_test_samples_20_runs_with_under5_test_runs.csv"
+    remote_url = "https://raw.githubusercontent.com/Olatundemi/MalariaEmulator/main/test/ANC_Simulation_test_samples_20_runs_with_under5.csv"
 
     try:
         test_data = pd.read_csv(remote_url)
