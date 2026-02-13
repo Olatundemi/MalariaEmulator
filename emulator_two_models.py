@@ -4,8 +4,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from src.inference_sequence_creator import create_sequences, create_shifting_sequences
-from src.inference_model_exp import LSTM_EIR, LSTM_Incidence
+from src.inference_sequence_creator import create_multistream_sequences
+from src.inference_model_exp import MultiHeadModel
 import time
 import hashlib
 
@@ -21,9 +21,9 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Apply a modern Seaborn theme
-sns.set_style("darkgrid")  
-plt.style.use("ggplot")
+# # Apply a modern Seaborn theme
+# sns.set_style("darkgrid")  
+# plt.style.use("ggplot")
 
 # Custom CSS for better UI
 st.markdown("""
@@ -53,37 +53,36 @@ st.markdown("""
 
 # Function to load model
 @st.cache_resource
-def load_models(model_eir_path, model_inc_path):
+def load_models(model_eir_path):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    model_eir = LSTM_EIR(input_size=1, architecture=[256, 128, 64, 32])
+    model_eir = MultiHeadModel()
     model_eir.load_state_dict(torch.load(model_eir_path, map_location=device))
     model_eir.to(device)
     model_eir.eval()
 
-    model_inc = LSTM_Incidence(input_size=2, architecture=[256, 128, 64, 32])
-    model_inc.load_state_dict(torch.load(model_inc_path, map_location=device))
-    model_inc.to(device)
-    model_inc.eval()
+    return model_eir, device
 
-    return model_eir, model_inc, device
-
-# Function to preprocess data
 def preprocess_data(df):
 
-    # Sanity Check for selected prevalence column
     if not pd.api.types.is_numeric_dtype(df['prev_true']):
-        st.error("🚨 The selected prevalence column is invalid. It contains non-numeric values.")
-        return None, False  # Return None to indicate failure
-    
-    has_true_values = {'EIR_true', 'incall'}.issubset(df.columns)
+        st.error("🚨 The selected prevalence column is invalid.")
+        return None, False
+
+    has_true_values = {'EIR_true', 'incall', 'phi'}.issubset(df.columns)
+
+    df_scaled = df.copy()
+
+    # Log-transform ONLY model columns
+    df_scaled['prev_true'] = log_transform(df_scaled['prev_true'])
 
     if has_true_values:
-        df_scaled = df[['prev_true', 'EIR_true', 'incall']].apply(log_transform)
-    else:
-        df_scaled = df[['prev_true']].apply(log_transform)
-    
+        df_scaled['EIR_true'] = log_transform(df_scaled['EIR_true'])
+        df_scaled['incall'] = log_transform(df_scaled['incall'])
+        df_scaled['phi'] = log_transform(df_scaled['phi'])
+
     return df_scaled, has_true_values
+
 
 # Function to convert time column
 def convert_time_column(df, time_column):
@@ -110,214 +109,227 @@ def convert_time_column(df, time_column):
         st.error(f"Error in converting time column: {e}")
         return None
     
+def infer_chained_models(model, run_df, win_eir, win_phi, device, has_true_values):
+
+    model.eval()
+
+    streams = create_multistream_sequences(
+        run_df,
+        win_eir=win_eir,
+        win_phi=win_phi
+    )
+
+    with torch.no_grad():
+        batch = {k: tuple(v.to(device) if v is not None else None for v in streams[k]) for k in streams}
+
+        pred_eir_log, pred_phi_log, pred_inc_log = model(batch)
+
+        # Convert to natural scale
+        p_eir = inverse_log_transform(
+        pred_eir_log.squeeze(-1).cpu().numpy()
+        )
+
+        p_phi = inverse_log_transform(
+            pred_phi_log.squeeze(-1).cpu().numpy()
+        )
+
+        p_inc = inverse_log_transform(
+            pred_inc_log.squeeze(-1).cpu().numpy()
+        )
+
+
+    n_preds = len(p_eir)
+
+    # ---- Time Alignment ----
+    if "t" in run_df.columns:
+        t = run_df["t"].values[:n_preds] / 365.25
+    else:
+        t = np.arange(n_preds)
+
+    # ---- Ground Truth (only if available) ----
+    if has_true_values:
+        y_prev_true = inverse_log_transform(run_df["prev_true"].values[:n_preds])
+        y_eir_true = inverse_log_transform(streams["eir"][2].squeeze(-1).cpu().numpy())
+        y_phi_true = inverse_log_transform(streams["phi"][2].squeeze(-1).cpu().numpy())
+        y_inc_true = inverse_log_transform(streams["inc"][1].squeeze(-1).cpu().numpy())
+
+    else:
+        y_prev_true = run_df["prev_true"].values[:n_preds]
+        y_eir_true = None
+        y_phi_true = None
+        y_inc_true = None
+
+    return {
+        "t": t,
+        "prev": (y_prev_true, None),
+        "eir": (y_eir_true, p_eir),
+        "phi": (y_phi_true, p_phi),
+        "inc": (y_inc_true, p_inc)
+    }
+
+    
 @st.cache_data(show_spinner="🔄 Running model predictions...")
-def generate_predictions_per_run(data, selected_runs, run_column, window_size, _model_eir, _model_inc, _device, has_true_values):
+def generate_predictions_per_run(data, selected_runs, run_column,
+                                 _model, _device, has_true_values):
+
     run_results = {}
 
     for run in selected_runs:
-        run_data = data[data[run_column] == run]
-        if run_data.empty:
+
+        run_df = data[data[run_column] == run].reset_index(drop=True)
+        if run_df.empty:
             continue
 
-        scaled_data, _ = preprocess_data(run_data)
-        if scaled_data is None:
-            continue
+        res = infer_chained_models(
+            _model,
+            run_df,
+            win_eir=20,
+            win_phi=300,
+            device=_device,
+            has_true_values=has_true_values
+        )
 
-        X_eir_scaled, y_eir = create_sequences(scaled_data, window_size)
-        if len(X_eir_scaled) == 0:
-            continue
-
-        X_eir_scaled = X_eir_scaled.to(_device)
-        with torch.no_grad():
-            eir_preds_scaled = _model_eir(X_eir_scaled.unsqueeze(-1))
-            eir_preds_unscaled = inverse_log_transform(eir_preds_scaled.cpu().numpy())
-
-        prev_series_scaled = scaled_data['prev_true'].values[:len(eir_preds_scaled)]
-
-        inc_input_df_scaled = pd.DataFrame({
-            'prev_true': prev_series_scaled,
-            'EIR_true': scaled_data['EIR_true'].values[:len(eir_preds_scaled)] if 'EIR_true' in scaled_data.columns else eir_preds_scaled[:, 0].cpu().numpy()
-        })# This is not absolutely right (at the moment) interms of actual versus predicted EIR
-
-        X_inc_input, _ = create_shifting_sequences(inc_input_df_scaled, window_size)
-        X_inc_input = X_inc_input.to(_device)
-
-        with torch.no_grad():
-            inc_preds_scaled = _model_inc(X_inc_input)
-            inc_preds_unscaled = inverse_log_transform(inc_preds_scaled.cpu().numpy())
-
-        run_results[run] = {
-            "eir_preds_scaled": eir_preds_scaled.cpu().numpy(),
-            "eir_preds_unscaled": eir_preds_unscaled,
-            "inc_preds_unscaled": inc_preds_unscaled,
-            "scaled_data": scaled_data,
-            "original_data": run_data,
-            "y_eir_true": y_eir.cpu().numpy() if y_eir is not None else None
-        }
+        run_results[run] = res
 
     return run_results
 
+
 @st.cache_data
 def compute_global_yaxis_limits(run_results):
-    all_prev, all_eir, all_inc = [], [], []
+
+    all_prev = []
+    all_eir = []
+    all_inc = []
 
     for result in run_results.values():
-        #scaled_data = result['scaled_data']
-        run_data = result["original_data"]
-        all_prev.extend(run_data['prev_true'].values)
-        all_inc.extend(result['inc_preds_unscaled'][:, 0])
-        all_eir.extend(result['eir_preds_unscaled'][:, 0])
 
-    prev_min, prev_max = 0, max(all_prev) * 1.1 if all_prev else (0, 1)
-    eir_min, eir_max = 0, max(all_eir) * 1.1 if all_eir else (0, 1)
-    inc_min, inc_max = 0, max(all_inc) * 1.1 if all_inc else (0, 1)
+        # ---- PREVALENCE ----
+        prev_true, _ = result["prev"]
+        if prev_true is not None:
+            all_prev.extend(prev_true)
 
-    return (prev_min, prev_max), (eir_min, eir_max), (inc_min, inc_max)
+        # ---- EIR ----
+        eir_true, eir_pred = result["eir"]
+
+        if eir_true is not None:
+            all_eir.extend(eir_true)
+
+        if eir_pred is not None:
+            all_eir.extend(eir_pred)
+
+        # ---- INCIDENCE ----
+        inc_true, inc_pred = result["inc"]
+
+        if inc_true is not None:
+            all_inc.extend(inc_true)
+
+        if inc_pred is not None:
+            all_inc.extend(inc_pred)
+
+    # ---- Compute Limits Safely ----
+    def safe_limits(values):
+        if len(values) == 0:
+            return (0, 1)
+        return (0, max(values) * 1.1)
+
+    prev_limits = safe_limits(all_prev)
+    eir_limits = safe_limits(all_eir)
+    inc_limits = safe_limits(all_inc)
+
+    return prev_limits, eir_limits, inc_limits
 
 
-def plot_predictions(run_results, run_column, time_column, selected_runs, 
-                     log_eir, log_inc, log_all, prev_limits, eir_limits, inc_limits):
+def plot_predictions(run_results, selected_runs,
+                     log_eir, log_inc, log_all):
+    
+    metric_colors = {
+    "eir": "#1f77b4",   # blue
+    "phi":  "#d62728",   # red
+    "inc":  "#2ca02c"
+    }
 
-    is_string_time = not pd.api.types.is_numeric_dtype(
-        next(iter(run_results.values()))['original_data'][time_column]
-    )
-
-    if is_string_time:
-        time_labels = next(iter(run_results.values()))['original_data'][time_column].unique()
-        time_values = np.arange(len(time_labels))
-    else:
-        time_values = next(iter(run_results.values()))['original_data'][time_column].astype(float) / 365.25
-        time_labels = None
 
     num_plots = len(selected_runs)
-    fig, axes = plt.subplots(num_plots, 3, figsize=(18, 5 * num_plots), sharex=True)
+
+    fig, axes = plt.subplots(num_plots, 4,
+                             figsize=(22, 5 * num_plots),
+                             sharex=False)
+
     if num_plots == 1:
         axes = np.expand_dims(axes, axis=0)
 
-    colors = sns.color_palette("muted", 3)
+    titles = ["Prevalence", "EIR", "Phi", "Incidence"]
+    metrics = ["prev", "eir", "phi", "inc"]
+
     data_to_download = []
 
-    prev_min, prev_max = prev_limits
-    eir_min, eir_max = eir_limits
-    inc_min, inc_max = inc_limits
-
     for i, run in enumerate(selected_runs):
-        result = run_results.get(run)
-        if result is None:
-            st.warning(f"⚠️ No prediction result available for run '{run}'")
-            continue
 
-        eir_preds_unscaled = result["eir_preds_unscaled"]
-        inc_preds_unscaled = result["inc_preds_unscaled"]
-        scaled_run_data = result["scaled_data"]
-        run_data = result["original_data"]
-        y_eir_unscaled = inverse_log_transform(result["y_eir_true"]) if result["y_eir_true"] is not None else None
+        result = run_results[run]
+        t = result["t"]
 
-        has_inc_true = 'incall' in scaled_run_data.columns
-        y_inc_unscaled = None
-        if has_inc_true:
-            X_inc_all, y_inc = create_shifting_sequences(
-                scaled_run_data[['prev_true', 'EIR_true', 'incall']], window_size=10
-            )
-            y_inc_unscaled = inverse_log_transform(y_inc.numpy())
-
-        time_values_plot = time_values[:len(eir_preds_unscaled)-window_size] # I took off the last rough predictions
-        min_len = len(eir_preds_unscaled) - window_size#len(time_va
-
-        plot_data = []
-
-        # Prevalence (true only, no prediction)
-        plot_data.append({
-            "title": "Prevalence",
-            "pred": None,  # No estimated prevalence
-            "true": run_data['prev_true'].values[:min_len]
+        run_export = pd.DataFrame({
+            "run": run,
+            "time_years": t
         })
 
-        # EIR
-        plot_data.append({
-            "title": "EIR",
-            "pred": eir_preds_unscaled[:min_len, 0], #
-            "true": y_eir_unscaled[:min_len, 0] if y_eir_unscaled is not None else None
-        })
+        for j, metric in enumerate(metrics):
 
-        # Incidence
-        plot_data.append({
-            "title": "Incidence",
-            "pred": inc_preds_unscaled[:min_len, 0],
-            "true": y_inc_unscaled[:min_len, 0] if y_inc_unscaled is not None else None
-        })
+            y_true, y_pred = result[metric]
+            ax = axes[i, j]
 
-        log_scales = {
-            "Prevalence": log_all,
-            "EIR": log_eir or log_all,
-            "Incidence": log_inc or log_all
-        }
+            # ---- Plot Ground Truth ----
+            if y_true is not None:
+                ax.plot(t, y_true,
+                        color="black",
+                        linewidth=2,
+                        label="True")
 
-        y_limits = {
-            "Prevalence": (prev_min, prev_max),
-            "EIR": (eir_min, eir_max),
-            "Incidence": (inc_min, inc_max)
-        }
+                run_export[f"Actual_{metric}"] = y_true
 
-        for ax, data, color in zip(axes[i], plot_data, colors):
-            title = data["title"]
-            pred = data["pred"]
-            true = data["true"]
+            # ---- Plot Prediction ----
+            if y_pred is not None:
+                ax.plot(t, y_pred,
+                        linestyle="--",
+                        linewidth=2.5,
+                        color=metric_colors[metric],
+                        label="Estimated")
 
-            x_vals = time_values_plot#[:len(true)]
+                run_export[f"Estimated_{metric}"] = y_pred
 
-            # Always plot true values (black)
-            if true is not None:
-                ax.plot(x_vals, true, color="black", linestyle="-",
-                        label=f"True {title}", linewidth=2)
+            # ---- Log Scaling ----
+            if log_all:
+                ax.set_yscale("log")
+            elif metric == "eir" and log_eir:
+                ax.set_yscale("log")
+            elif metric == "inc" and log_inc:
+                ax.set_yscale("log")
 
-            # Only plot prediction for EIR and Incidence
-            if title != "Prevalence" and pred is not None:
-                ax.plot(x_vals, pred, linestyle="--", color=color,
-                        label=f"Estimated {title}", linewidth=2.5)
+            ax.set_title(f"{run} - {titles[j]}", fontsize=13)
+            ax.set_xlabel("Time (Years)")
+            ax.grid(alpha=0.3)
 
-            if log_scales[title]:
-                ax.set_yscale('log')
+            if j == 0:
+                ax.set_ylabel("Value")
 
-            ax.set_ylim(*y_limits[title])
-            ax.set_title(f"{run} - {title}", fontsize=14, color="#FF4B4B")
-            ax.set_ylabel(title, fontsize=12)
             ax.legend()
 
-            df_export = pd.DataFrame({
-            "run": run,
-            "time": run_data[time_column].values[:min_len],
-            "Prevalence": plot_data[0]["true"],
-            "Estimated EIR": plot_data[1]["pred"],
-            "Estimated Incidence": plot_data[2]["pred"]
-            })
-
-            # Add Actual EIR if available
-            if plot_data[1]["true"] is not None:
-                df_export["Actual EIR"] = plot_data[1]["true"]
-
-            # Add Actual Incidence if available
-            if plot_data[2]["true"] is not None:
-                df_export["Actual Incidence"] = plot_data[2]["true"]
-
-            data_to_download.append(df_export)
-
-
-    for ax in axes[-1]:
-        if is_string_time:
-            tick_indices = np.arange(0, len(time_values_plot), step=6, dtype=int)
-            ax.set_xticks(time_values_plot[tick_indices])
-            ax.set_xticklabels(np.array(time_labels)[tick_indices], rotation=45, fontsize=10)
-        else:
-            ax.set_xlabel("Years", fontsize=12)
+        data_to_download.append(run_export)
 
     plt.tight_layout()
     st.pyplot(fig)
 
+    # ---- DOWNLOAD BUTTON ----
     if data_to_download:
-        combined_data = pd.concat(data_to_download, keys=selected_runs, names=[run_column, "Index"])
-        csv_data = combined_data.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Download Estimates as CSV", data=csv_data, file_name="predictions.csv", mime="text/csv")
+        combined_data = pd.concat(data_to_download, ignore_index=True)
+        csv_data = combined_data.to_csv(index=False).encode("utf-8")
+
+        st.download_button(
+            "📥 Download Estimates as CSV",
+            data=csv_data,
+            file_name="model_predictions.csv",
+            mime="text/csv"
+        )
 
 
 def adjust_trailing_zero_prevalence(df, prevalence_column='prev_true', min_val=0.0003, max_val=0.001, seed=None):
@@ -341,7 +353,7 @@ def get_file_hash(file):
     return hashlib.md5(file.getvalue()).hexdigest()
 
 # Streamlit UI
-st.title("🔬 Malaria Incidence and EIR Estimator with AI")
+st.title("🔬 Testing New MultiHead Model")
 
 
 # Choose data source
@@ -349,7 +361,7 @@ data_source = st.radio("📊 Select data source", ("Upload my own data", "Use pr
 
 # Load the data accordingly
 if data_source == "Use preloaded test data":
-    remote_url = "https://raw.githubusercontent.com/Olatundemi/MalariaEmulator/main/test/ANC_Simulation_1000_test_runs.csv"
+    remote_url = "https://raw.githubusercontent.com/Olatundemi/MalariaEmulator/main/test/ANC_Simulation_1000ANC_Simulation_test_samples_20_runs_with_under5_test_runs.csv"
 
     try:
         test_data = pd.read_csv(remote_url)
@@ -358,13 +370,25 @@ if data_source == "Use preloaded test data":
         st.error(f"Failed to load preloaded data: {e}")
         st.stop()
 else:
-    uploaded_file = st.file_uploader("📂 Upload prevalence data to estimate (CSV)", type=["csv"])
+    uploaded_file = st.file_uploader("📂 Upload prevalence data to estimate (CSV or Parquet)", type=["csv", "parquet"])
 
     if uploaded_file is not None:
         file_hash = get_file_hash(uploaded_file)
-        test_data = load_uploaded_csv(uploaded_file)
+
+        try:
+            if uploaded_file.name.endswith(".csv"):
+                test_data = load_uploaded_csv(uploaded_file)
+            elif uploaded_file.name.endswith(".parquet"):
+                test_data = pd.read_parquet(uploaded_file)
+            else:
+                st.error("❌ Unsupported file format.")
+                st.stop()
+        except Exception as e:
+            st.error(f"Failed to load uploaded data: {e}")
+            st.stop()
+
     else:
-        st.warning("Please upload a CSV file to continue.")
+        st.warning("Please upload a CSV or Parquet file to continue.")
         st.stop()
 
 columns = test_data.columns.tolist()
@@ -384,13 +408,12 @@ if 'prev_true' not in columns:
     prevalence_column = st.selectbox("🩸 Select the column corresponding to prevalence", columns)#, key=f"prevalence_select_{key_suffix}")
     filtered_data = filtered_data.rename(columns={prevalence_column: 'prev_true'})
 
-#test_data = adjust_trailing_zero_prevalence(test_data, prevalence_column='prev_true', seed=42)
+test_data = adjust_trailing_zero_prevalence(test_data, prevalence_column='prev_true', seed=42)
 
 #model_path = #"src/trained_model/4_layers_model.pth"
 window_size = 10
-model_eir_path = "src/trained_model/shifting_sequences/LSTM_EIR_4_layers_10000run_W10.pth"
-model_inc_path = "src/trained_model/shifting_sequences/LSTM_Incidence_4_layer_10000run_W10_shifting_sequence.pth"
-model_eir, model_inc, device = load_models(model_eir_path, model_inc_path)
+model_eir_path = "src/trained_model/shifting_sequences/multitask_model_improvedMSConv_HPE_EIR_phi_with_incidence.pth"#LSTM_EIR_4_layers_10000run_W10.pth"
+model_eir, device = load_models(model_eir_path)
 
 if filtered_data.empty:
     st.warning("No valid data found. Select necessary items to proceed")
@@ -414,8 +437,8 @@ if selected_runs:
     if st.button("🚀 Run Predictions"):
         start_time = time.time()
         run_results = generate_predictions_per_run(
-            filtered_data, selected_runs, run_column, window_size,
-            model_eir, model_inc, device, has_true_values
+            df_scaled, selected_runs, run_column,
+            model_eir, device, has_true_values
         )
         st.info(f"✅ Predictions computed in {time.time() - start_time:.2f} seconds")
 
@@ -429,18 +452,7 @@ if selected_runs:
 
         start_time = time.time()
         plot_predictions(
-            run_results, run_column, time_column, selected_runs,
-            log_eir, log_inc, log_all, prev_limits, eir_limits, inc_limits
+            run_results, selected_runs,
+            log_eir, log_inc, log_all
         )
         st.info(f"✅ Plots generated in {time.time() - start_time:.2f} seconds")
-
-
-
-# def main():
-#     import streamlit.web.bootstrap
-#     from pathlib import Path
-#     script_path = Path(__file__).resolve()
-#     streamlit.web.bootstrap.run(script_path, '', [])
-
-# if __name__ == "__main__":
-#     main()
