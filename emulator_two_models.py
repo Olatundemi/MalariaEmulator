@@ -7,8 +7,6 @@ import seaborn as sns
 from src.inference_sequence_creator import create_multistream_sequences
 from src.inference_model_exp import MultiHeadModel
 import time
-import hashlib
-
 
 log_transform = lambda x: np.log(x + 1e-8)
 inverse_log_transform = lambda x: np.exp(x) - 1e-8
@@ -282,7 +280,7 @@ def plot_predictions(run_results, selected_runs,
             if y_true is not None:
                 ax.plot(t, y_true,
                         color="black",
-                        linewidth=2,
+                        linewidth=1.8,
                         label="True")
 
                 run_export[f"Actual_{metric}"] = y_true
@@ -291,7 +289,7 @@ def plot_predictions(run_results, selected_runs,
             if y_pred is not None:
                 ax.plot(t, y_pred,
                         linestyle="--",
-                        linewidth=2.5,
+                        linewidth=1.8,
                         color=metric_colors[metric],
                         label="Estimated")
 
@@ -349,9 +347,6 @@ def adjust_trailing_zero_prevalence(df, prevalence_column='prev_true', min_val=0
 def load_uploaded_csv(file_content):
     return pd.read_csv(file_content)
 
-def get_file_hash(file):
-    return hashlib.md5(file.getvalue()).hexdigest()
-
 # Streamlit UI
 st.title("🔬 Testing New MultiHead Model")
 
@@ -373,8 +368,6 @@ else:
     uploaded_file = st.file_uploader("📂 Upload prevalence data to estimate (CSV or Parquet)", type=["csv", "parquet"])
 
     if uploaded_file is not None:
-        file_hash = get_file_hash(uploaded_file)
-
         try:
             if uploaded_file.name.endswith(".csv"):
                 test_data = load_uploaded_csv(uploaded_file)
@@ -410,8 +403,6 @@ if 'prev_true' not in columns:
 
 test_data = adjust_trailing_zero_prevalence(test_data, prevalence_column='prev_true', seed=42)
 
-#model_path = #"src/trained_model/4_layers_model.pth"
-window_size = 10
 model_eir_path = "src/trained_model/shifting_sequences/multitask_model_improvedMSConv_HPE_EIR_phi_with_incidence.pth"#LSTM_EIR_4_layers_10000run_W10.pth"
 model_eir, device = load_models(model_eir_path)
 
