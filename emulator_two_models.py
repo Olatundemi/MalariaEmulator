@@ -11,6 +11,13 @@ import time
 log_transform = lambda x: np.log(x + 1e-8)
 inverse_log_transform = lambda x: np.exp(x) - 1e-8
 
+@st.cache_resource
+def load_stats():
+    stats = torch.load("latent_stats.pt")
+    return stats["mu_latent"], stats["cov_inv_latent"], stats["ood_threshold"]
+
+mu_latent, cov_inv_latent, ood_threshold = load_stats()
+
 
 # Set page configuration
 st.set_page_config(
@@ -107,7 +114,17 @@ def convert_time_column(df, time_column):
         st.error(f"Error in converting time column: {e}")
         return None
     
-def infer_chained_models(model, run_df, win_eir, win_phi, device, has_true_values):
+def infer_chained_models(
+    model,
+    run_df,
+    win_eir,
+    win_phi,
+    device,
+    has_true_values,
+    _mu_latent=None,
+    _cov_inv_latent=None,
+    _ood_threshold=None
+):
 
     model.eval()
 
@@ -118,39 +135,60 @@ def infer_chained_models(model, run_df, win_eir, win_phi, device, has_true_value
     )
 
     with torch.no_grad():
-        batch = {k: tuple(v.to(device) if v is not None else None for v in streams[k]) for k in streams}
+        batch = {
+            k: tuple(v.to(device) if v is not None else None for v in streams[k])
+            for k in streams
+        }
 
         pred_eir_log, pred_phi_log, pred_inc_log = model(batch)
 
+        # =========================
+        # 🔥 OOD DETECTION
+        # =========================
+        if _mu_latent is not None and _cov_inv_latent is not None:
+
+            h_eir = model.eir(batch["eir"][0], batch["eir"][1], return_sequence=False)
+            h_phi = model.phi(batch["phi"][0], batch["phi"][1], return_sequence=False)
+
+            z = torch.cat([h_eir, h_phi], dim=-1)
+
+            z_cpu = z.cpu()
+            diff = z_cpu - _mu_latent
+
+            d = torch.sum(diff @ _cov_inv_latent * diff, dim=1)
+
+            ood_distance = d.numpy()
+
+            if _ood_threshold is not None:
+                ood_mask = ood_distance > _ood_threshold.item()
+            else:
+                ood_mask = None
+
+        else:
+            ood_distance = None
+            ood_mask = None
+
+        # =========================
         # Convert to natural scale
-        p_eir = inverse_log_transform(
-        pred_eir_log.squeeze(-1).cpu().numpy()
-        )
-
-        p_phi = inverse_log_transform(
-            pred_phi_log.squeeze(-1).cpu().numpy()
-        )
-
-        p_inc = inverse_log_transform(
-            pred_inc_log.squeeze(-1).cpu().numpy()
-        )
-
+        # =========================
+        p_eir = inverse_log_transform(pred_eir_log.squeeze(-1).cpu().numpy())
+        p_phi = inverse_log_transform(pred_phi_log.squeeze(-1).cpu().numpy())
+        p_inc = inverse_log_transform(pred_inc_log.squeeze(-1).cpu().numpy())
 
     n_preds = len(p_eir)
 
-    # ---- Time Alignment ----
+    # ---- Time ----
     if "t" in run_df.columns:
         t = run_df["t"].values[:n_preds] / 365.25
     else:
         t = np.arange(n_preds)
 
-    # ---- Ground Truth (only if available) ----
+    # ---- Ground Truth ----
     if has_true_values:
         y_prev_true = inverse_log_transform(run_df["prev_true"].values[:n_preds])
         y_eir_true = inverse_log_transform(streams["eir"][2].squeeze(-1).cpu().numpy())
         y_phi_true = inverse_log_transform(streams["phi"][2].squeeze(-1).cpu().numpy())
         y_inc_true = inverse_log_transform(streams["inc"][1].squeeze(-1).cpu().numpy())
-
     else:
         y_prev_true = run_df["prev_true"].values[:n_preds]
         y_eir_true = None
@@ -162,13 +200,24 @@ def infer_chained_models(model, run_df, win_eir, win_phi, device, has_true_value
         "prev": (y_prev_true, None),
         "eir": (y_eir_true, p_eir),
         "phi": (y_phi_true, p_phi),
-        "inc": (y_inc_true, p_inc)
+        "inc": (y_inc_true, p_inc),
+        "ood_distance": ood_distance,
+        "ood_mask": ood_mask
     }
 
     
 @st.cache_data(show_spinner="🔄 Running model predictions...")
-def generate_predictions_per_run(data, selected_runs, run_column,
-                                 _model, _device, has_true_values):
+def generate_predictions_per_run(
+    data,
+    selected_runs,
+    run_column,
+    _model,
+    _device,
+    has_true_values,
+    _mu_latent,
+    _cov_inv_latent,
+    _ood_threshold
+):
 
     run_results = {}
 
@@ -184,13 +233,33 @@ def generate_predictions_per_run(data, selected_runs, run_column,
             win_eir=20,
             win_phi=300,
             device=_device,
-            has_true_values=has_true_values
+            has_true_values=has_true_values,
+            _mu_latent=_mu_latent,
+            _cov_inv_latent=_cov_inv_latent,
+            _ood_threshold=_ood_threshold
         )
 
         run_results[run] = res
 
     return run_results
 
+def overlay_ood_streamlit(ax, t, mask):
+
+    if mask is None:
+        return
+
+    start = None
+
+    for i in range(len(mask)):
+        if mask[i] and start is None:
+            start = t[i]
+
+        elif not mask[i] and start is not None:
+            ax.axvspan(start, t[i], color="orange", alpha=0.2)
+            start = None
+
+    if start is not None:
+        ax.axvspan(start, t[-1], color="orange", alpha=0.2)
 
 @st.cache_data
 def compute_global_yaxis_limits(run_results):
@@ -237,21 +306,28 @@ def compute_global_yaxis_limits(run_results):
     return prev_limits, eir_limits, inc_limits
 
 
-def plot_predictions(run_results, selected_runs,
-                     log_eir, log_inc, log_all):
-    
-    metric_colors = {
-    "eir": "#1f77b4",   # blue
-    "phi":  "#d62728",   # red
-    "inc":  "#2ca02c"
-    }
+def plot_predictions(
+    run_results,
+    selected_runs,
+    log_eir,
+    log_inc,
+    log_all,
+    show_ood=True
+):
 
+    metric_colors = {
+        "eir": "#1f77b4",
+        "phi": "#d62728",
+        "inc": "#2ca02c"
+    }
 
     num_plots = len(selected_runs)
 
-    fig, axes = plt.subplots(num_plots, 4,
-                             figsize=(22, 5 * num_plots),
-                             sharex=False)
+    fig, axes = plt.subplots(
+        num_plots, 4,
+        figsize=(22, 5 * num_plots),
+        sharex=False
+    )
 
     if num_plots == 1:
         axes = np.expand_dims(axes, axis=0)
@@ -265,6 +341,7 @@ def plot_predictions(run_results, selected_runs,
 
         result = run_results[run]
         t = result["t"]
+        ood_mask = result.get("ood_mask", None)
 
         run_export = pd.DataFrame({
             "run": run,
@@ -276,26 +353,27 @@ def plot_predictions(run_results, selected_runs,
             y_true, y_pred = result[metric]
             ax = axes[i, j]
 
-            # ---- Plot Ground Truth ----
-            if y_true is not None:
-                ax.plot(t, y_true,
-                        color="black",
-                        linewidth=1.8,
-                        label="True")
+            # ---- OOD overlay FIRST (so lines appear on top) ----
+            if show_ood:
+                overlay_ood_streamlit(ax, t, ood_mask)
 
+            # ---- True ----
+            if y_true is not None:
+                ax.plot(t, y_true, color="black", linewidth=1.8, label="True")
                 run_export[f"Actual_{metric}"] = y_true
 
-            # ---- Plot Prediction ----
+            # ---- Pred ----
             if y_pred is not None:
-                ax.plot(t, y_pred,
-                        linestyle="--",
-                        linewidth=1.8,
-                        color=metric_colors[metric],
-                        label="Estimated")
-
+                ax.plot(
+                    t, y_pred,
+                    linestyle="--",
+                    linewidth=1.8,
+                    color=metric_colors[metric],
+                    label="Estimated"
+                )
                 run_export[f"Estimated_{metric}"] = y_pred
 
-            # ---- Log Scaling ----
+            # ---- Log scaling ----
             if log_all:
                 ax.set_yscale("log")
             elif metric == "eir" and log_eir:
@@ -317,7 +395,7 @@ def plot_predictions(run_results, selected_runs,
     plt.tight_layout()
     st.pyplot(fig)
 
-    # ---- DOWNLOAD BUTTON ----
+    # ---- Download ----
     if data_to_download:
         combined_data = pd.concat(data_to_download, ignore_index=True)
         csv_data = combined_data.to_csv(index=False).encode("utf-8")
@@ -429,8 +507,7 @@ if selected_runs:
         start_time = time.time()
         run_results = generate_predictions_per_run(
             df_scaled, selected_runs, run_column,
-            model_eir, device, has_true_values
-        )
+            model_eir, device, has_true_values, _mu_latent=mu_latent,_cov_inv_latent=cov_inv_latent,_ood_threshold=ood_threshold)
         st.info(f"✅ Predictions computed in {time.time() - start_time:.2f} seconds")
 
         if not run_results:
@@ -444,6 +521,6 @@ if selected_runs:
         start_time = time.time()
         plot_predictions(
             run_results, selected_runs,
-            log_eir, log_inc, log_all
+            log_eir, log_inc, log_all, show_ood=True
         )
         st.info(f"✅ Plots generated in {time.time() - start_time:.2f} seconds")
