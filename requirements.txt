@@ -1,4 +1,5 @@
 extra-streamlit-components==0.1.71
+streamlit_echarts
 matplotlib==3.9.0
 matplotlib-inline==0.1.7
 numpy==1.26.4
