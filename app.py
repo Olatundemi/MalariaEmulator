@@ -446,6 +446,7 @@ def infer_chained_models(
         # ----- OOD only when explicitly requested -----
         ood_distance = None
         ood_mask = None
+        ood_threshold_value = None
         if compute_ood and _mu_latent is not None and _cov_inv_latent is not None:
             h_eir = model.eir(batch["eir"][0], batch["eir"][1], return_sequence=False)
             h_phi = model.phi(batch["phi"][0], batch["phi"][1], return_sequence=False)
@@ -454,7 +455,8 @@ def infer_chained_models(
             d = torch.sum(diff @ _cov_inv_latent * diff, dim=1)
             ood_distance = d.numpy()
             if _ood_threshold is not None:
-                ood_mask = ood_distance > _ood_threshold.item()
+                ood_threshold_value = _ood_threshold.item()
+                ood_mask = ood_distance > ood_threshold_value
 
         p_eir = inverse_log_transform(pred_eir_log.squeeze(-1).cpu().numpy())
         p_phi = inverse_log_transform(pred_phi_log.squeeze(-1).cpu().numpy())
@@ -481,6 +483,7 @@ def infer_chained_models(
         "inc": (y_inc_true, p_inc),
         "ood_distance": ood_distance,
         "ood_mask": ood_mask,
+        "ood_threshold": ood_threshold_value,
     }
 
 
@@ -542,6 +545,20 @@ def plot_predictions(
         ood_mask = result.get("ood_mask", None) if show_ood else None
 
         run_export = pd.DataFrame({"run": run, "time_years": t})
+
+        # ----- Latent (Mahalanobis) distance + OOD exceedance, only when OOD was computed -----
+        ood_distance = result.get("ood_distance") if show_ood else None
+        if ood_distance is not None:
+            n_pts = len(t)
+            ood_distance = ood_distance[:n_pts]
+            run_export["latent_distance"] = ood_distance
+
+            ood_threshold = result.get("ood_threshold")
+            if ood_threshold is not None:
+                run_export["ood_threshold"] = ood_threshold
+                # How far the distance sits above the threshold; 0 for in-distribution points
+                run_export["ood_exceedance"] = np.clip(ood_distance - ood_threshold, a_min=0.0, a_max=None)
+                run_export["is_ood"] = ood_distance > ood_threshold
 
         panels = []
         for j, metric in enumerate(metrics):
@@ -887,7 +904,7 @@ with tab2:
             test_data = test_data.rename(columns={prevalence_column: 'prev_true'})
 
         if selected_runs:
-            model_path = "src/trained_model/shifting_sequences/multitask_model_improvedMSConv_HPE_EIR_phi_with_incidence.pth"
+            model_path = "src/trained_model/shifting_sequences/multitask_model_improvedMSConv_HPE_EIR_phi_with_incidence.pth"#"C:\\Users\\oibrahim\\Documents\\MalariaEmulator\\multitask_LSTMmodel_MSconv_EIR_15_phi_245_inc_20000run_under5.pth"#
             model, device = load_models(model_path)
 
             filtered_data = test_data[test_data[run_column].isin(selected_runs)]
